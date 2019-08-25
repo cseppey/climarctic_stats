@@ -18,7 +18,9 @@ registerDoSNOW(cl)
 # dir loads ####
 dir_in <- 'Projets/Climarctic/stats/MBC/in/'
 dir_out <- 'Projets/Climarctic/stats/MBC/out/'
+dir_prep <- paste0(dir_out, '00_prep/') 
 dir_save <- paste0(dir_out, 'saves/') 
+dir.create(dir_prep, showWarnings=F, recursive=T)
 dir.create(dir_save, showWarnings=F, recursive=T)
 
 # env ----
@@ -114,7 +116,77 @@ lst_comm <- foreach(i=ind_prim, .verbose=T) %dopar% {
   mr_sort <- mr_tot[,ord_taxo]
   taxo_sort <- taxo_tot[ord_taxo,]
   
-  return(list(mr_sort=mr_sort, ass_sort=ass_sort, taxo_sort=taxo_sort))
+  # rrarefy ----
+  rs <- rowSums(mr_sort)
+  thresh <- seq(min(rs), max(rs), length.out=20)
+  thresh <- thresh[-length(thresh)]
+  
+  # nb seq
+  plot(sort(rs))
+  abline(h=thresh)
+  
+  # perc lost
+  perc_lost <- matrix(NA, nrow=3, ncol=length(thresh), dimnames=list(c('seq','otu','smp'), paste0('t', thresh)))
+  
+  set.seed(0)
+  for(j in thresh){
+    if(nrow(mr_sort[rs >= j,]) > 1){
+      mr_rrf <- rrarefy(mr_sort[rs >= j,], j)
+      mr_rrf <- mr_rrf[,colSums(mr_rrf) != 0]
+      
+      n <- paste0('t', j)
+      perc_lost[1,n] <- sum(mr_rrf) / sum(mr_sort)
+      perc_lost[2,n] <- ncol(mr_rrf) / ncol(mr_sort)
+      perc_lost[3,n] <- nrow(mr_rrf) / nrow(mr_sort)
+    }
+  }
+  
+  l <- NULL
+  for(j in c(0.5, 0.75, 1)){
+    optimum <- ceiling(mean(apply(perc_lost[-3,], 1, function(x) thresh[which(x == max(x, na.rm=T))])))*j
+    
+    # which smps did we loose
+    set.seed(0)
+    mr_rrf <- rrarefy(mr_sort[rs >= optimum,], optimum)
+    mr_rrf <- mr_rrf[,colSums(mr_rrf) != 0]
+    
+    e <- env_sort[row.names(mr_rrf),]
+    
+    ll <- NULL
+    for(k in c('site','moisture','depth')){
+      ll[[k]] <- paste(c(j, k, signif(table(e[[k]]) / table(env_sort[[k]]), 2)), collapse=' ')
+    }
+    
+    l <- cbind(l, ll)
+  }
+  
+  #---
+  pdf(paste0(dir_prep, 'rraref_optimum_', prim_names[i], '.pdf'))
+  
+  plot(NA, xlim=range(thresh), ylim=c(0,1), xlab='thresh', ylab='percentage',
+       main=paste('seq ini:', sum(mr_sort), 'otu ini:', ncol(mr_sort), 'smp ini:', nrow(mr_sort)))
+  
+  for(j in 1:nrow(perc_lost)){
+    lines(thresh, perc_lost[j,], col=j)
+  }
+  
+  abline(v=c(optimum, optimum*0.75, optimum*0.5), lty=3)
+
+  legend('topright',legend=l)
+  
+  dev.off()
+  
+  #---
+  set.seed(0)
+  mr_rrf <- rrarefy(mr_sort[rs >= optimum,], optimum)
+  mr_rrf <- mr_rrf[,colSums(mr_rrf) != 0]
+  
+  env_rrf <- env_sort[row.names(mr_rrf),]
+  
+  ass_rrf <- ass_sort[names(mr_rrf),]
+  taxo_rrf <- taxo_sort[names(mr_rrf),]
+  
+  return(list(mr_sort=mr_sort, ass_sort=ass_sort, taxo_sort=taxo_sort, mr_rrf=mr_rrf, ass_rrf=ass_rrf, taxo_rrf=taxo_rrf, env_rrf=env_rrf))
 }
 
 names(lst_comm) <- prim_names[ind_prim]
