@@ -186,7 +186,10 @@ lst_comm <- foreach(i=ind_prim, .verbose=T) %dopar% {
   ass_rrf <- ass_sort[names(mr_rrf),]
   taxo_rrf <- taxo_sort[names(mr_rrf),]
   
-  return(list(mr_sort=mr_sort, ass_sort=ass_sort, taxo_sort=taxo_sort, mr_rrf=mr_rrf, ass_rrf=ass_rrf, taxo_rrf=taxo_rrf, env_rrf=env_rrf))
+  lst <- list(raw=list(mr=mr_sort, ass=ass_sort, taxo=taxo_sort, env=env_sort),
+              rrf=list(mr=mr_rrf, ass=ass_rrf, taxo=taxo_rrf, env=env_rrf))
+  
+  return(lst)
 }
 
 names(lst_comm) <- prim_names[ind_prim]
