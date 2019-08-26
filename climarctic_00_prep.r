@@ -24,25 +24,38 @@ dir.create(dir_prep, showWarnings=F, recursive=T)
 dir.create(dir_save, showWarnings=F, recursive=T)
 
 # env ----
-env_ini <- read.table(paste0(dir_in, 'env_clim_grad.csv'), row.names=1)
+env_ini_fact <- read.table(paste0(dir_in, 'env_clim_grad.csv'), row.names=1)
+env_ini_chim <- read.table(paste0(dir_in, 'env_clim_chim.csv'), h=T)
 
-# reorganize env
-rn <- row.names(env_ini)
-row.names(env_ini) <- ifelse(as.numeric(rn) < 100, ifelse(as.numeric(rn) < 10, paste0('T00', rn), paste0('T0', rn)), paste0('T', rn))
+# reorganize env fact
+rn <- row.names(env_ini_fact)
+row.names(env_ini_fact) <- ifelse(as.numeric(rn) < 100, ifelse(as.numeric(rn) < 10, paste0('T00', rn), paste0('T0', rn)), paste0('T', rn))
 
-env_tot <- env_ini[,c(2:5,7)]
-names(env_tot) <- c('site','moisture','plot','depth','quadrat')
+# reorganize env_chim
+as_char <- as.character(env_ini_chim$sample)
+env_ini_chim$site  <- substr(as_char, 1, 1)
+env_ini_chim$moist <- rep(gl(3,3, labels=c('dry','medium','wet')), 4)
+env_ini_chim$depth <- gl(2, 18, labels=c('top','deep'))
+
+env_ini_chim <- env_ini_chim[c(matrix(1:36, nrow=2, byrow=T)),]
+env_ini_chim <- env_ini_chim[as.numeric(gl(36,3)),]
+
+# the the interesting variables
+env_tot <- cbind.data.frame(env_ini_fact[,c(2:5,7:11)], env_ini_chim[,c('pH','N','C','sand','silt','clay')])
+names(env_tot)[1:9] <- c('site','moisture','plot','depth','quadrat','empty','fresh','dry','burn')
+
+env_tot[,c('fresh','dry','burn')] <- sapply(env_tot[,c('fresh','dry','burn')], function(x) x-env_tot$empty)
+env_tot$rh <- (env_tot$fresh-env_tot$dry) / env_tot$fresh
+env_tot$om <- (env_tot$dry-env_tot$burn) / env_tot$dry
+
+env_tot <- env_tot[,-grep(paste(c('empty','fresh','dry','burn'), collapse='|'), names(env_tot))]
 
 env_tot$site <- gl(2, 54, labels=c('Knudsenheia','Ossian'))
-
 env_tot$moisture <- gl(3,18,108, c('dry','medium','wet'))
-
 env_tot$plot <- as.factor(env_tot$plot)
 
 env_tot$moist_in_site <- factor(apply(env_tot[,c('moisture','site')], 1, function(x) paste(x, collapse='_')))
-
 env_tot$plot_in_moist_in_site <- factor(apply(env_tot[,c('plot','moist_in_site')], 1, function(x) paste(x, collapse='_')))
-
 env_tot$quad_in_plot_in_moist <- factor(apply(env_tot[,c('quadrat','plot_in_moist_in_site')], 1, function(x) paste(x, collapse='_')))
 
 # palette ----
