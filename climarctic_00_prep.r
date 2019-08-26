@@ -24,30 +24,31 @@ dir.create(dir_prep, showWarnings=F, recursive=T)
 dir.create(dir_save, showWarnings=F, recursive=T)
 
 # env ----
-env_tot <- read.table(paste0(dir_in, 'env_clim_grad.csv'), row.names=1)
+env_ini <- read.table(paste0(dir_in, 'env_clim_grad.csv'), row.names=1)
 
 # reorganize env
-rn <- row.names(env_tot)
-row.names(env_tot) <- ifelse(as.numeric(rn) < 100, ifelse(as.numeric(rn) < 10, paste0('T00', rn), paste0('T0', rn)), paste0('T', rn))
+rn <- row.names(env_ini)
+row.names(env_ini) <- ifelse(as.numeric(rn) < 100, ifelse(as.numeric(rn) < 10, paste0('T00', rn), paste0('T0', rn)), paste0('T', rn))
 
-env_sort <- env_tot[,c(2:5,7)]
-names(env_sort) <- c('site','moisture','plot','depth','quadrat')
+env_tot <- env_ini[,c(2:5,7)]
+names(env_tot) <- c('site','moisture','plot','depth','quadrat')
 
-env_sort$site <- gl(2, 54, labels=c('Knudsenheia','Ossian'))
-env_sort$moisture <- gl(3,18,108, c('dry','medium','wet'))
+env_tot$site <- gl(2, 54, labels=c('Knudsenheia','Ossian'))
 
-env_sort$plot <- as.factor(env_sort$plot)
+env_tot$moisture <- gl(3,18,108, c('dry','medium','wet'))
 
-env_sort$moist_in_site <- factor(apply(env_sort[,c('moisture','site')], 1, function(x) paste(x, collapse='_')))
+env_tot$plot <- as.factor(env_tot$plot)
 
-env_sort$plot_in_moist_in_site <- factor(apply(env_sort[,c('plot','moist_in_site')], 1, function(x) paste(x, collapse='_')))
+env_tot$moist_in_site <- factor(apply(env_tot[,c('moisture','site')], 1, function(x) paste(x, collapse='_')))
 
-env_sort$quad_in_plot_in_moist <- factor(apply(env_sort[,c('quadrat','plot_in_moist_in_site')], 1, function(x) paste(x, collapse='_')))
+env_tot$plot_in_moist_in_site <- factor(apply(env_tot[,c('plot','moist_in_site')], 1, function(x) paste(x, collapse='_')))
+
+env_tot$quad_in_plot_in_moist <- factor(apply(env_tot[,c('quadrat','plot_in_moist_in_site')], 1, function(x) paste(x, collapse='_')))
 
 # palette ----
-lev_site <- levels(env_sort$site)
-lev_mois <- levels(env_sort$moisture)
-lev_dept <- levels(env_sort$depth)
+lev_site <- levels(env_tot$site)
+lev_mois <- levels(env_tot$moisture)
+lev_dept <- levels(env_tot$depth)
 
 lst_palev <- list(site    =list(pal=brewer.pal(length(lev_site), 'Dark2')[seq_along(lev_site)],
                                 lev=lev_site),
@@ -115,6 +116,7 @@ lst_comm <- foreach(i=ind_prim, .verbose=T) %dopar% {
   ass_sort <- ass_tot[ord_taxo,]
   mr_sort <- mr_tot[,ord_taxo]
   taxo_sort <- taxo_tot[ord_taxo,]
+  env_sort <- env_tot[row.names(mr_sort),]
   
   # rrarefy ----
   rs <- rowSums(mr_sort)
@@ -150,11 +152,11 @@ lst_comm <- foreach(i=ind_prim, .verbose=T) %dopar% {
     mr_rrf <- rrarefy(mr_sort[rs >= optimum,], optimum)
     mr_rrf <- mr_rrf[,colSums(mr_rrf) != 0]
     
-    e <- env_sort[row.names(mr_rrf),]
+    e <- env_tot[row.names(mr_rrf),]
     
     ll <- NULL
     for(k in c('site','moisture','depth')){
-      ll[[k]] <- paste(c(j, k, signif(table(e[[k]]) / table(env_sort[[k]]), 2)), collapse=' ')
+      ll[[k]] <- paste(c(j, k, signif(table(e[[k]]) / table(env_tot[[k]]), 2)), collapse=' ')
     }
     
     l <- cbind(l, ll)
@@ -179,15 +181,15 @@ lst_comm <- foreach(i=ind_prim, .verbose=T) %dopar% {
   #---
   set.seed(0)
   mr_rrf <- rrarefy(mr_sort[rs >= optimum,], optimum)
-  mr_rrf <- mr_rrf[,colSums(mr_rrf) != 0]
+  mr_rrf <- as.data.frame(mr_rrf[,colSums(mr_rrf) != 0])
   
-  env_rrf <- env_sort[row.names(mr_rrf),]
+  env_rrf <- env_tot[row.names(mr_rrf),]
   
   ass_rrf <- ass_sort[names(mr_rrf),]
   taxo_rrf <- taxo_sort[names(mr_rrf),]
   
-  lst <- list(raw=list(mr=mr_sort, ass=ass_sort, taxo=taxo_sort, env=env_sort),
-              rrf=list(mr=mr_rrf, ass=ass_rrf, taxo=taxo_rrf, env=env_rrf))
+  lst <- list(raw=list(env=env_tot, mr=mr_sort, ass=ass_sort, taxo=taxo_sort),
+              rrf=list(env=env_rrf, mr=mr_rrf,  ass=ass_rrf,  taxo=taxo_rrf))
   
   return(lst)
 }
@@ -196,7 +198,7 @@ names(lst_comm) <- prim_names[ind_prim]
 
 #---
 file <- paste0(dir_save, 'lst_comm.Rdata')
-save(lst_comm, env_sort, lst_palev, permu, file=file)
+save(lst_comm, env_tot, lst_palev, permu, file=file)
 
 #
 
