@@ -9,15 +9,6 @@ require(foreach)
 require(doSNOW) # e.g. makeSOCKcluster()
 require(plotrix)
 
-# prep cluster
-cl <- makeSOCKcluster(2)
-
-clusterEvalQ(cl, library(plotrix))
-clusterEvalQ(cl, library(foreach))
-clusterEvalQ(cl, library(doSNOW))
-
-registerDoSNOW(cl)
-
 
 # dir loads ####
 dir_out  <- 'Projets/Climarctic/stats/MBC/out/'
@@ -43,7 +34,7 @@ for(h in c('raw','rrf')){
   
   p18S$mr   <- p18S$mr[,ind_ME == F]
   p18S$ass  <- p18S$ass[ind_ME == F,]
-  p18S$taxo <- p18S$taxo[ind_ME == F,]
+  p18S$taxo <- droplevels(p18S$taxo[ind_ME == F,])
   
   lst_comm$`18S_V4_no_ME`[[h]] <- p18S
   
@@ -54,21 +45,20 @@ for(h in c('raw','rrf')){
   
   p16S$mr   <- p16S$mr[,ind_cya]
   p16S$ass  <- p16S$ass[ind_cya,]
-  p16S$taxo <- p16S$taxo[ind_cya,]
+  p16S$taxo <- droplevels(p16S$taxo[ind_cya,])
   
   lst_comm$`16S_V1-3_cya`[[h]] <- p16S
   
   # pie ####
-  foreach(i=names(lst_comm)[4], .verbose=T) %dopar% {
+  for(i in names(lst_comm)){
+
+    print(i)
     
-    cl2 <- makeSOCKcluster(2)
-    
-    clusterEvalQ(cl2, library(plotrix))
-    
-    registerDoSNOW(cl2)
+    # prep cluster
+    cl <- makeSOCKcluster(4)
+    registerDoSNOW(cl)
     
     #---
-    
     mr <- lst_comm[[i]][[h]]$mr
     taxo <- lst_comm[[i]][[h]]$taxo
     env <- lst_comm[[i]][[h]]$env
@@ -79,21 +69,25 @@ for(h in c('raw','rrf')){
                       dry   =which(env$moisture == 'dry'),
                       medium=which(env$moisture == 'medium'),
                       wet   =which(env$moisture == 'wet'),
-                      top   =which(env$depth    == 'T'),
-                      deep  =which(env$depth    == 'D'))
-    names(selec_smp1) <- paste0(names(selec_smp1), ' smp nb: ', lapply(selec_smp1, function(x) nrow(mr[x,])),
-                                '\nseq nb: ', lapply(selec_smp1, function(x) sum(mr[x,])))
+                      top   =which(env$depth    == 'top'),
+                      deep  =which(env$depth    == 'deep'))
+    names(selec_smp1) <- paste0(names(selec_smp1), ' smp nb: ', 
+                                parLapply(cl, selec_smp1, function(x, mr=mr) nrow(mr[x,]), mr),
+                                '\nseq nb: ', 
+                                parLapply(cl, selec_smp1, function(x, mr=mr) sum(mr[x,]), mr))
     
     #---
     selec_smp2 <- factor(paste(env$moist_in_site, env$depth, sep='_'))
     lev <- levels(selec_smp2)
     selec_smp2 <- as.character(selec_smp2)
     
-    for(j in lev){
+    rs <- rowSums(mr)
+    
+    system.time(for(j in lev){
       cond <- strsplit(j, '_')[[1]]
       ind <- which(env$moisture == cond[1] & env$site == cond[2] & env$depth == cond[3])
-      selec_smp2[ind] <- paste0(j, '\nsmp nb: ', length(ind), ' seq nb: ', sum(mr[ind,]))
-    }
+      selec_smp2[ind] <- paste0(j, '\nsmp nb: ', length(ind), ' seq nb: ', sum(rs[ind]))
+    })
     
     selec_smp2 <- as.factor(selec_smp2)
     
@@ -124,14 +118,36 @@ for(h in c('raw','rrf')){
                                         wdt=57, hei=18)
                         )
     
+    #---
+    stopCluster(cl)
+    
+    # prep cluster
+    cl <- makeSOCKcluster(2)
+    
+    clusterEvalQ(cl, library(plotrix))
+    clusterEvalQ(cl, library(foreach))
+    clusterEvalQ(cl, library(doSNOW))
+    
+    registerDoSNOW(cl)
+    
     # loop on abundance and diversity
     foreach(j=c('abundance','richness'), .verbose=T) %dopar% {
       
+      # prep cluster
+      cl2 <- makeSOCKcluster(2)
+      
+      clusterEvalQ(cl2, library(plotrix))
+      clusterEvalQ(cl2, library(foreach))
+      clusterEvalQ(cl2, library(doSNOW))
+      
+      registerDoSNOW(cl2)
+      
+      #---
       if(j == 'richness'){
         mr <- decostand(mr, 'pa')
       }
       
-      for(k in seq_along(lst_arg_pie)){
+      foreach(k=rev(seq_along(lst_arg_pie)), .verbose=T) %dopar% {
         kn <- names(lst_arg_pie)[k]
         kl <- lst_arg_pie[[k]]
         
@@ -143,13 +159,18 @@ for(h in c('raw','rrf')){
         dev.off()
       }
       
+      #---
+      stopCluster(cl2)
+      
     }
     
   }
   
 }
 
-
+#---
+file <- paste0(dir_save, 'lst_comm_01.Rdata')
+save(lst_comm, file=file)
 
 #
 
