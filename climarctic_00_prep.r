@@ -53,6 +53,7 @@ env_tot <- env_tot[,-grep(paste(c('empty','fresh','dry','burn'), collapse='|'), 
 env_tot$site <- gl(2, 54, labels=c('Knudsenheia','Ossian'))
 env_tot$moisture <- gl(3,18,108, c('dry','medium','wet'))
 env_tot$plot <- as.factor(env_tot$plot)
+env_tot$depth <- rep(gl(2,3, labels=c('top','deep')), 18)
 
 env_tot$moist_in_site <- factor(apply(env_tot[,c('moisture','site')], 1, function(x) paste(x, collapse='_')))
 env_tot$plot_in_moist_in_site <- factor(apply(env_tot[,c('plot','moist_in_site')], 1, function(x) paste(x, collapse='_')))
@@ -78,7 +79,10 @@ permu <- 10000
 prim_names <- c('16S_V1-3','18S_V4','pmoA_mb661','pmoA_A682','ITS2','phoD','nifH')
 ind_prim <- c(1,2)
 
-lst_comm <- foreach(i=ind_prim, .verbose=T) %dopar% {
+lst_comm <- NULL
+for(i in ind_prim) {
+  
+  print(i)
   
   id_plate <- as.character(i)
   if(i < 10){
@@ -86,9 +90,15 @@ lst_comm <- foreach(i=ind_prim, .verbose=T) %dopar% {
   }
   
   #---
-  mr_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.mr'), h=T)
-  ass_ini <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.DB.wang.taxonomy'), row.names=1)
-  fa_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.fa'))
+  file <- paste0(dir_save, 'ini_', id_plate, '.Rdata')
+  if(file.exists(file)){
+    load(file)
+  } else {
+    mr_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.mr'), h=T)
+    ass_ini <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.DB.wang.taxonomy'), row.names=1)
+    fa_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.fa'))
+    save(mr_ini, ass_ini, fa_ini, file=file)
+  }
   
   # reorganize mr
   n_mr <- sapply(strsplit(names(mr_ini), '_'), '[', 1:2)
@@ -116,6 +126,9 @@ lst_comm <- foreach(i=ind_prim, .verbose=T) %dopar% {
   row.names(taxo_tot) <- row.names(ass_tot)
   
   taxo_tot <- as.data.frame(t(apply(taxo_tot, 1, function(x) {
+    x <- gsub('Incertae_Sedis', 'X', x)
+    x <- gsub('Unknown', 'unknown', x)
+    
     ind_unc <- grep('^[[:lower:]]', x)
     for(i in ind_unc){
       x[i] <- ifelse(grepl('_X', x[i-1]), paste0(x[i-1], 'X'), paste0(x[i-1], '_X'))
@@ -141,20 +154,17 @@ lst_comm <- foreach(i=ind_prim, .verbose=T) %dopar% {
   abline(h=thresh)
   
   # perc lost
-  perc_lost <- matrix(NA, nrow=3, ncol=length(thresh), dimnames=list(c('seq','otu','smp'), paste0('t', thresh)))
-  
   set.seed(0)
-  for(j in thresh){
+  perc_lost <- foreach(j=thresh, .combine=cbind, .verbose=T) %dopar% {
     if(nrow(mr_sort[rs >= j,]) > 1){
       mr_rrf <- rrarefy(mr_sort[rs >= j,], j)
       mr_rrf <- mr_rrf[,colSums(mr_rrf) != 0]
-      
-      n <- paste0('t', j)
-      perc_lost[1,n] <- sum(mr_rrf) / sum(mr_sort)
-      perc_lost[2,n] <- ncol(mr_rrf) / ncol(mr_sort)
-      perc_lost[3,n] <- nrow(mr_rrf) / nrow(mr_sort)
+
+      return(c(sum(mr_rrf) / sum(mr_sort), ncol(mr_rrf) / ncol(mr_sort), nrow(mr_rrf) / nrow(mr_sort)))
     }
   }
+
+  dimnames(perc_lost) <- list(c('seq','otu','smp'), paste0('t', thresh[1:ncol(perc_lost)]))
   
   l <- NULL
   for(j in c(0.5, 0.75, 1)){
@@ -182,7 +192,7 @@ lst_comm <- foreach(i=ind_prim, .verbose=T) %dopar% {
        main=paste('seq ini:', sum(mr_sort), 'otu ini:', ncol(mr_sort), 'smp ini:', nrow(mr_sort)))
   
   for(j in 1:nrow(perc_lost)){
-    lines(thresh, perc_lost[j,], col=j)
+    lines(thresh[1:ncol(perc_lost)], perc_lost[j,], col=j)
   }
   
   abline(v=c(optimum, optimum*0.75, optimum*0.5), lty=3)
@@ -201,13 +211,10 @@ lst_comm <- foreach(i=ind_prim, .verbose=T) %dopar% {
   ass_rrf <- ass_sort[names(mr_rrf),]
   taxo_rrf <- taxo_sort[names(mr_rrf),]
   
-  lst <- list(raw=list(env=env_sort, mr=mr_sort, ass=ass_sort, taxo=taxo_sort),
-              rrf=list(env=env_rrf,  mr=mr_rrf,  ass=ass_rrf,  taxo=taxo_rrf))
+  lst_comm[[prim_names[i]]] <- list(raw=list(env=env_sort, mr=mr_sort, ass=ass_sort, taxo=taxo_sort),
+                                    rrf=list(env=env_rrf,  mr=mr_rrf,  ass=ass_rrf,  taxo=taxo_rrf))
   
-  return(lst)
 }
-
-names(lst_comm) <- prim_names[ind_prim]
 
 #---
 file <- paste0(dir_save, 'lst_comm.Rdata')
