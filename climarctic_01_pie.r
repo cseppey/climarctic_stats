@@ -41,7 +41,9 @@ for(h in c('raw','rrf')){
   # make a 18S version without metazoa or embryophyceae
   p16S <- lst_comm$`16S_V1-3`[[h]]
   
-  ind_cya <- p16S$taxo$V2 == 'Cyanobacteria'
+  ind_cya <- p16S$taxo$V2 == 'Cyanobacteria' &
+    p16S$taxo$V3 != 'Sericytochromatia' &
+    p16S$taxo$V4 != 'Chloroplast'
   
   p16S$mr   <- p16S$mr[,ind_cya]
   p16S$ass  <- p16S$ass[ind_cya,]
@@ -50,76 +52,19 @@ for(h in c('raw','rrf')){
   lst_comm$`16S_V1-3_cya`[[h]] <- p16S
   
   # pie ####
-  for(i in names(lst_comm)){
+  for(i in names(lst_comm)[4]){
 
     print(i)
     
-    # prep cluster
-    cl <- makeSOCKcluster(4)
-    registerDoSNOW(cl)
+    tax_lev <- 1:5
+    if(i == '16S_V1-3_cya'){
+      tax_lev <- 4:6
+    }
     
     #---
     mr <- lst_comm[[i]][[h]]$mr
     taxo <- lst_comm[[i]][[h]]$taxo
     env <- lst_comm[[i]][[h]]$env
-
-    # arrange the smp nb and seq nb for per fact and cross fact
-    selec_smp1 <-list(Knud  =which(env$site     == 'Knudsenheia'),
-                      Ossian=which(env$site     == 'Ossian'),
-                      dry   =which(env$moisture == 'dry'),
-                      medium=which(env$moisture == 'medium'),
-                      wet   =which(env$moisture == 'wet'),
-                      top   =which(env$depth    == 'top'),
-                      deep  =which(env$depth    == 'deep'))
-    names(selec_smp1) <- paste0(names(selec_smp1), ' smp nb: ', 
-                                parLapply(cl, selec_smp1, function(x, mr=mr) nrow(mr[x,]), mr),
-                                '\nseq nb: ', 
-                                parLapply(cl, selec_smp1, function(x, mr=mr) sum(mr[x,]), mr))
-    
-    #---
-    selec_smp2 <- factor(paste(env$moist_in_site, env$depth, sep='_'))
-    lev <- levels(selec_smp2)
-    selec_smp2 <- as.character(selec_smp2)
-    
-    rs <- rowSums(mr)
-    
-    system.time(for(j in lev){
-      cond <- strsplit(j, '_')[[1]]
-      ind <- which(env$moisture == cond[1] & env$site == cond[2] & env$depth == cond[3])
-      selec_smp2[ind] <- paste0(j, '\nsmp nb: ', length(ind), ' seq nb: ', sum(rs[ind]))
-    })
-    
-    selec_smp2 <- as.factor(selec_smp2)
-    
-    # arrange the layout for the per smp
-    lay <- NULL
-    ind=1
-    for(j in 1:108){
-      if(j %in% as.numeric(substr(row.names(mr), 2, nchar(row.names(mr))))){
-        lay <- c(lay, ind)
-        ind <- ind+1
-      } else {
-        lay <- c(lay, 0)
-      }
-    }
-    
-    # arg pie
-    lst_arg_pie <- list(per_fact  =list(selec_smp=selec_smp1,
-                                        mat_lay=matrix(c(0,1,2,8, 3:5,8, 0,6,7,8), nrow=3, byrow=T),
-                                        wdt_lay=c(1,1,1,3), hei_lay=c(rep(1.1, 3)),
-                                        wdt=15, hei=7),
-                        cross_fact=list(selec_smp=selec_smp2,
-                                        mat_lay=matrix(c(1:4,13, 5:8,13, 9:12,13), nrow=3, byrow=T),
-                                        wdt_lay=c(1,1,1,1, 3), hei_lay=c(rep(1.1, 3)),
-                                        wdt=15, hei=7),
-                        per_smp   =list(selec_smp=factor(paste0(row.names(mr), ' nb seq: ', rowSums(mr), '\n', env$moist_in_site, '_', env$depth)),
-                                        mat_lay=cbind(matrix(lay, nrow=6, byrow=T), rep(max(lay)+1, 6))[,c(1:3,7:9,13:15, 4:6,10:12,16:18, 19)],
-                                        wdt_lay=c(rep(1, 18), 3), hei_lay=c(rep(1.1,6)),
-                                        wdt=57, hei=18)
-                        )
-    
-    #---
-    stopCluster(cl)
     
     # prep cluster
     cl <- makeSOCKcluster(2)
@@ -142,18 +87,77 @@ for(h in c('raw','rrf')){
       
       registerDoSNOW(cl2)
       
-      #---
+      #-------------
       if(j == 'richness'){
         mr <- decostand(mr, 'pa')
       }
       
+      #---
+      # arrange the smp nb and seq nb for per fact and cross fact
+      selec_smp1 <-list(Knud  =which(env$site     == 'Knudsenheia'),
+                        Ossian=which(env$site     == 'Ossian'),
+                        dry   =which(env$moisture == 'dry'),
+                        medium=which(env$moisture == 'medium'),
+                        wet   =which(env$moisture == 'wet'),
+                        top   =which(env$depth    == 'top'),
+                        deep  =which(env$depth    == 'deep'))
+      names(selec_smp1) <- paste0(names(selec_smp1), ' smp nb: ', 
+                                  parLapply(cl2, selec_smp1, function(x, mr=mr) nrow(mr[x,]), mr),
+                                  ifelse(j == 'abundance', '\nseq nb: ', '\nOTU nb: '), 
+                                  parLapply(cl2, selec_smp1, function(x, mr=mr) sum(mr[x,]), mr))
+      
+      #---
+      selec_smp2 <- factor(paste(env$moist_in_site, env$depth, sep='_'))
+      lev <- levels(selec_smp2)
+      selec_smp2 <- as.character(selec_smp2)
+      
+      rs <- rowSums(mr)
+        
+      for(k in lev){
+        cond <- strsplit(k, '_')[[1]]
+        ind <- which(env$moisture == cond[1] & env$site == cond[2] & env$depth == cond[3])
+        selec_smp2[ind] <- paste0(k, '\nsmp nb: ', length(ind), 
+                                  ifelse(j == 'abundance', ' seq nb: ', ' OTU nb: '), sum(rs[ind]))
+      }
+      
+      selec_smp2 <- as.factor(selec_smp2)
+      
+      # arrange the layout for the per smp
+      lay <- NULL
+      ind=1
+      for(k in 1:108){
+        if(k %in% as.numeric(substr(row.names(mr), 2, nchar(row.names(mr))))){
+          lay <- c(lay, ind)
+          ind <- ind+1
+        } else {
+          lay <- c(lay, 0)
+        }
+      }
+      
+      # arg pie
+      lst_arg_pie <- list(per_fact  =list(selec_smp=selec_smp1,
+                                          mat_lay=matrix(c(0,1,2,8, 3:5,8, 0,6,7,8), nrow=3, byrow=T),
+                                          wdt_lay=c(1,1,1,3), hei_lay=c(rep(1.1, 3)),
+                                          wdt=15, hei=7),
+                          cross_fact=list(selec_smp=selec_smp2,
+                                          mat_lay=matrix(c(1:4,13, 5:8,13, 9:12,13), nrow=3, byrow=T),
+                                          wdt_lay=c(1,1,1,1, 3), hei_lay=c(rep(1.1, 3)),
+                                          wdt=15, hei=7),
+                          per_smp   =list(selec_smp=factor(paste0(row.names(mr), ifelse(j == 'abundance', ' nb seq: ', ' OTU nb: '),
+                                                                  rowSums(mr), '\n', env$moist_in_site, '_', env$depth)),
+                                          mat_lay=cbind(matrix(lay, nrow=6, byrow=T), rep(max(lay)+1, 6))[,c(1:3,7:9,13:15, 4:6,10:12,16:18, 19)],
+                                          wdt_lay=c(rep(1, 18), 3), hei_lay=c(rep(1.1,6)),
+                                          wdt=57, hei=18)
+      )
+      
+      #---
       foreach(k=rev(seq_along(lst_arg_pie)), .verbose=T) %dopar% {
         kn <- names(lst_arg_pie)[k]
         kl <- lst_arg_pie[[k]]
         
         pdf(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.pdf'), width=kl$wdt, height=kl$hei)
         
-        pie_taxo(mr, taxo, ifelse(i == '16S_V1-3_cya', 4, 1):5, kl$selec_smp, mat_lay=kl$mat_lay, 
+        pie_taxo(mr, taxo, tax_lev, kl$selec_smp, mat_lay=kl$mat_lay, 
                  wdt_lay=kl$wdt_lay, hei_lay=kl$hei_lay, last_tax_text=F)
         
         dev.off()
