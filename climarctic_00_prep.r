@@ -47,13 +47,15 @@ names(env_tot)[1:9] <- c('site','moisture','plot','depth','quadrat','empty','fre
 env_tot[,c('fresh','dry','burn')] <- sapply(env_tot[,c('fresh','dry','burn')], function(x) x-env_tot$empty)
 env_tot$rh <- (env_tot$fresh-env_tot$dry) / env_tot$fresh
 env_tot$om <- (env_tot$dry-env_tot$burn) / env_tot$dry
+env_tot$C_N <- env_tot$C / env_tot$N
 
 env_tot <- env_tot[,-grep(paste(c('empty','fresh','dry','burn'), collapse='|'), names(env_tot))]
 
 env_tot$site <- gl(2, 54, labels=c('Knudsenheia','Ossian'))
-env_tot$moisture <- gl(3,18,108, c('dry','medium','wet'))
+env_tot$moisture <- ordered(gl(3,18,108, c('dry','medium','wet')))
 env_tot$plot <- as.factor(env_tot$plot)
 env_tot$depth <- rep(gl(2,3, labels=c('top','deep')), 18)
+env_tot$depth <- factor(env_tot$depth, levels=c('top','deep'))
 
 env_tot$moist_in_site <- factor(apply(env_tot[,c('moisture','site')], 1, function(x) paste(x, collapse='_')))
 env_tot$plot_in_moist_in_site <- factor(apply(env_tot[,c('plot','moist_in_site')], 1, function(x) paste(x, collapse='_')))
@@ -64,12 +66,10 @@ lev_site <- levels(env_tot$site)
 lev_mois <- levels(env_tot$moisture)
 lev_dept <- levels(env_tot$depth)
 
-lst_palev <- list(site    =list(pal=brewer.pal(length(lev_site), 'Dark2')[seq_along(lev_site)],
-                                lev=lev_site),
-                  moisture=list(pal=brewer.pal(length(lev_mois), 'Set1'),
-                                lev=lev_mois),
-                  depth   =list(pal=brewer.pal(length(lev_dept), 'Set2')[seq_along(lev_dept)],
-                                lev=lev_dept)
+pal_dark2 <- brewer.pal(8, 'Dark2')
+lst_palev <- list(site    =list(pal=pal_dark2[1:2], lev=lev_site),
+                  moisture=list(pal=pal_dark2[3:5], lev=lev_mois),
+                  depth   =list(pal=pal_dark2[6:7], lev=lev_dept)
 )
 
 # permu ----
@@ -82,7 +82,7 @@ ind_prim <- c(1,2)
 lst_comm <- NULL
 for(i in ind_prim) {
   
-  print(i)
+  print(prim_names[i])
   
   id_plate <- as.character(i)
   if(i < 10){
@@ -90,7 +90,7 @@ for(i in ind_prim) {
   }
   
   #---
-  file <- paste0(dir_save, 'ini_', id_plate, '.Rdata')
+  file <- paste0(dir_save, '00_ini_', id_plate, '.Rdata')
   if(file.exists(file)){
     load(file)
   } else {
@@ -217,9 +217,11 @@ for(i in ind_prim) {
 }
 
 #---
-file <- paste0(dir_save, 'lst_comm.Rdata')
+file <- paste0(dir_save, '00_lst_comm.Rdata')
 save(lst_comm, env_tot, lst_palev, permu, file=file)
 
+file <- paste0(dir_save, '00_env_tot.Rdata')
+save(env_tot, file=file)
 #
 
 
