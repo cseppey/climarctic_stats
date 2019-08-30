@@ -1,5 +1,5 @@
 #####
-# climarctic preparation
+# climarctic pie charts
 #####
 
 rm(list=ls())
@@ -19,10 +19,11 @@ dir.create(dir_pie, showWarnings=F)
 source('bin/src/my_prog/R/pie_taxo.r')
 
 #---
-file <- paste0(dir_save, 'lst_comm.Rdata')
+file <- paste0(dir_save, '00_lst_comm.Rdata')
 load(file)
 
 # loop on raw and rraref
+lst_pie <- NULL
 for(h in c('raw','rrf')){
   
   print(h)
@@ -76,7 +77,7 @@ for(h in c('raw','rrf')){
     registerDoSNOW(cl)
     
     # loop on abundance and diversity
-    foreach(j=c('abundance','richness'), .verbose=T) %dopar% {
+    lst_pie1 <- foreach(j=c('abundance','richness'), .verbose=T) %dopar% {
       
       # prep cluster
       cl2 <- makeSOCKcluster(2)
@@ -151,30 +152,40 @@ for(h in c('raw','rrf')){
       )
       
       #---
-      foreach(k=rev(seq_along(lst_arg_pie)), .verbose=T) %dopar% {
+      lst_pie2 <- foreach(k=rev(seq_along(lst_arg_pie)), .verbose=T) %dopar% {
         kn <- names(lst_arg_pie)[k]
         kl <- lst_arg_pie[[k]]
         
         pdf(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.pdf'), width=kl$wdt, height=kl$hei)
         
-        pie_taxo(mr, taxo, tax_lev, kl$selec_smp, mat_lay=kl$mat_lay, 
-                 wdt_lay=kl$wdt_lay, hei_lay=kl$hei_lay, last_tax_text=F)
+        pie <- pie_taxo(mr, taxo, tax_lev, kl$selec_smp, mat_lay=kl$mat_lay,
+                        wdt_lay=kl$wdt_lay, hei_lay=kl$hei_lay, last_tax_text=F)
+        
+        return(pie)
         
         dev.off()
       }
       
+      names(lst_pie2) <- rev(names(lst_arg_pie))
+      
       #---
       stopCluster(cl2)
       
+      return(lst_pie2)
     }
     
+    names(lst_pie1) <- c('abundance','richness')
+    
+    lst_pie[[h]][[i]] <- lst_pie1
   }
   
 }
 
 #---
-file <- paste0(dir_save, 'lst_comm_01.Rdata')
+file <- paste0(dir_save, '01_lst_comm.Rdata')
 save(lst_comm, file=file)
+file <- paste0(dir_save, '01_lst_pie.Rdata')
+save(lst_pie, file=file)
 
 #
 
