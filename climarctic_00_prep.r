@@ -186,7 +186,8 @@ for(i in ind_prim) {
   }
   
   #---
-  pdf(paste0(dir_prep, 'rraref_optimum_', prim_names[i], '.pdf'))
+  # pdf(paste0(dir_prep, 'rraref_optimum_', prim_names[i], '.pdf'))
+  cairo_ps(paste0(dir_prep, 'rraref_optimum_', prim_names[i], '.eps'))
   
   plot(NA, xlim=range(thresh), ylim=c(0,1), xlab='thresh', ylab='percentage',
        main=paste('seq ini:', sum(mr_sort), 'otu ini:', ncol(mr_sort), 'smp ini:', nrow(mr_sort)))
@@ -197,7 +198,7 @@ for(i in ind_prim) {
   
   abline(v=c(optimum, optimum*0.75, optimum*0.5), lty=3)
 
-  legend('topright',legend=l)
+  legend('topright', legend=c('sequence','OTU','sample'), text.col=1:3, bty='n')
   
   dev.off()
   
@@ -222,7 +223,47 @@ save(lst_comm, env_tot, lst_palev, permu, file=file)
 
 file <- paste0(dir_save, '00_env_tot.Rdata')
 save(env_tot, file=file)
+
+
+# stat bioinfo
+stat <- read.table('Projets/Climarctic/bioinfo/archive/190901/stat.csv', head=T, sep='\t', row.names=1)
+
+lst_stat <- list(raw=stat, perc=as.data.frame(sapply(stat, function(x) x/x[1])))
+row.names(lst_stat$perc) <- row.names(lst_stat$raw)
+
+#---
+postscript(paste0(dir_prep, 'stat_bioinfo.eps'), width=15, height=7,
+           paper='special', horizontal=F)
+par(mfrow=c(1,2))
+
+pal <- brewer.pal(7, 'Set1')
+
+for(i in seq_along(lst_stat)){
+  l <- lst_stat[[i]]
+  plot(NA, xlim=c(1,nrow(l)), ylim=range(l, na.rm=T), ylab=ifelse(i == 1, 'nb seq','% lost'),
+       xaxt='n', xlab='', log=ifelse(i == 1, 'y',''))
+  axis(1, at=1:nrow(l),labels=row.names(l), las=2)
+  
+  for(j in seq_along(l)){
+    lines(l[j], col=pal[j])
+  }
+  
+  legend('bottomleft', legend=names(l), text.col=pal, bty='n')
+}  
+
+dev.off()
+
 #
+
+
+
+
+
+
+
+
+
+
 
 
 
