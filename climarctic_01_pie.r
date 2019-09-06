@@ -39,12 +39,13 @@ for(h in c('raw','rrf')){
   
   lst_comm$`18S_V4_no_ME`[[h]] <- p18S
   
-  # make a 18S version without metazoa or embryophyceae
+  # make a cyano version
   p16S <- lst_comm$`16S_V1-3`[[h]]
   
   ind_cya <- p16S$taxo$V2 == 'Cyanobacteria' &
     p16S$taxo$V3 != 'Sericytochromatia' &
-    p16S$taxo$V4 != 'Chloroplast'
+    p16S$taxo$V4 != 'Chloroplast' &
+    p16S$taxo$V4 != 'Vampirovibrionales'
   
   p16S$mr   <- p16S$mr[,ind_cya]
   p16S$ass  <- p16S$ass[ind_cya,]
@@ -52,13 +53,24 @@ for(h in c('raw','rrf')){
   
   lst_comm$`16S_V1-3_cya`[[h]] <- p16S
   
+  # make a proteobact version
+  p16S <- lst_comm$`16S_V1-3`[[h]]
+  
+  ind_cya <- p16S$taxo$V2 == 'Proteobacteria'
+  
+  p16S$mr   <- p16S$mr[,ind_cya]
+  p16S$ass  <- p16S$ass[ind_cya,]
+  p16S$taxo <- droplevels(p16S$taxo[ind_cya,])
+  
+  lst_comm$`16S_V1-3_proteo`[[h]] <- p16S
+  
   # pie ####
-  for(i in names(lst_comm)[4]){
+  for(i in names(lst_comm)){
 
     print(i)
     
     tax_lev <- 1:5
-    if(i == '16S_V1-3_cya'){
+    if(i == '16S_V1-3_cya' | i == '16S_V1-3_proteo'){
       tax_lev <- 4:6
     }
     
@@ -156,7 +168,8 @@ for(h in c('raw','rrf')){
         kn <- names(lst_arg_pie)[k]
         kl <- lst_arg_pie[[k]]
         
-        pdf(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.pdf'), width=kl$wdt, height=kl$hei)
+        # pdf(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.pdf'), width=kl$wdt, height=kl$hei)
+        cairo_ps(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.eps'), width=kl$wdt, height=kl$hei)
         
         pie <- pie_taxo(mr, taxo, tax_lev, kl$selec_smp, mat_lay=kl$mat_lay,
                         wdt_lay=kl$wdt_lay, hei_lay=kl$hei_lay, last_tax_text=F)
