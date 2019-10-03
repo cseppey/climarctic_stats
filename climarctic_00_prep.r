@@ -76,7 +76,7 @@ lst_palev <- list(site    =list(pal=pal_dark2[1:2], lev=lev_site),
 permu <- 10000
 
 # loop the primers ####
-prim_names <- c('16S_V1-3','18S_V4','pmoA_mb661','pmoA_A682','ITS2','phoD','nifH')
+prim_names <- c('16S_V1-3','18S_V4','pmoA_mb661','pmoA_A682','ITS2','phoD','nifH', 'cyaB','nirS')
 ind_prim <- c(1,2)
 
 lst_comm <- NULL
@@ -225,14 +225,16 @@ file <- paste0(dir_save, '00_env_tot.Rdata')
 save(env_tot, file=file)
 
 
-# stat bioinfo
+# stat bioinfo ####
+
+# perc lost----
 stat <- read.table('Projets/Climarctic/bioinfo/archive/190901/stat.csv', head=T, sep='\t', row.names=1)
 
 lst_stat <- list(raw=stat, perc=as.data.frame(sapply(stat, function(x) x/x[1])))
 row.names(lst_stat$perc) <- row.names(lst_stat$raw)
 
 #---
-postscript(paste0(dir_prep, 'stat_bioinfo.eps'), width=15, height=7,
+postscript(paste0(dir_prep, 'perc_loss.eps'), width=15, height=7,
            paper='special', horizontal=F)
 par(mfrow=c(1,2))
 
@@ -252,6 +254,51 @@ for(i in seq_along(lst_stat)){
 }  
 
 dev.off()
+
+# length distro ----
+
+lst_lim <- list(`16S_V1-3`=c(450,570),
+                `18S_V4`=c(380,480),
+                pmoA_mb661=c(490,530),
+                pmoA_A682=c(510,550),
+                ITS=c(270,500),
+                phoD=c(330,450),
+                nifH=c(310,450),
+                cyaB=c(),
+                nirS=c())
+
+pdf(paste0(dir_prep, 'lgt_distro.pdf'), width=15, height=15)
+par(mfrow=c(3,3))
+
+for(i in 1:7){
+  lgt_dis <- unlist(read.table(paste0('Projets/Climarctic/bioinfo/archive/next/0', i, '/01pear/distro_tot')))
+  hist(lgt_dis, breaks=50, main=names(lst_lim)[i])
+  abline(v=lst_lim[[i]])
+}
+
+dev.off()
+
+# filter vs trunc
+pdf(paste0(dir_prep, 'filter_vs_trunc.pdf'), width=15, height=15)
+par(mfrow=c(3,3))
+
+for(i in 1:7){
+  nb_seq_step <- read.table(paste0('Projets/Climarctic/bioinfo/archive/next/0', i, '/02fastq_filter/filter_test'))
+  
+  nb_seq_step <- t(apply(nb_seq_step, 1, function(x) x/x[1]))
+  
+  #---
+  plot(NA, xlim=c(1,4), ylim=range(nb_seq_step), ylab='nb_seq', xaxt='n', xlab='', main=prim_names[i])
+  axis(1, at=1:ncol(nb_seq_step), labels=c('raw','pear','no trunc','trunc'))
+  
+  for(j in 1:nrow(nb_seq_step)){
+    lines(1:4, nb_seq_step[j,])
+  }
+  
+}
+
+dev.off()
+
 
 #
 
