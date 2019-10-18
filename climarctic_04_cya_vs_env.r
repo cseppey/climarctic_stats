@@ -23,9 +23,9 @@ dir_cya  <- paste0(dir_out, '04_cya/')
 dir.create(dir_cya, showWarnings=F)
 
 #---
-file <- paste0(dir_save, 'lst_comm.Rdata')
+file <- paste0(dir_save, '00_lst_comm.Rdata')
 load(file)
-file <- paste0(dir_save, 'lst_comm_01.Rdata')
+file <- paste0(dir_save, '01_lst_comm.Rdata')
 load(file)
 
 fact_3 <- c('depth','site','moisture')
@@ -35,32 +35,32 @@ for(h in c('raw','rrf')){
   
   print(h)
   
-  mr   <- lst_comm$`16S_V1-3_cya`[[h]]$mr
-  ass  <- lst_comm$`16S_V1-3_cya`[[h]]$ass
-  taxo <- lst_comm$`16S_V1-3_cya`[[h]]$taxo
-  env  <- lst_comm$`16S_V1-3_cya`[[h]]$env
+  mr   <- lst_comm$`cyaB_cl`[[h]]$mr
+  ass  <- lst_comm$`cyaB_cl`[[h]]$ass
+  taxo <- lst_comm$`cyaB_cl`[[h]]$taxo
+  env  <- lst_comm$`cyaB_cl`[[h]]$env
   
-  mr_16S   <- lst_comm$`16S_V1-3`[[h]]$mr
-  taxo_16S <- lst_comm$`16S_V1-3`[[h]]$taxo
+  # mr_16S   <- lst_comm$`16S_V1-3`[[h]]$mr
+  # taxo_16S <- lst_comm$`16S_V1-3`[[h]]$taxo
   
   for(i in c('abundance','richness')){
     
     if(i == 'richness'){
       mr <- decostand(mr,'pa')
-      mr_16S <- decostand(mr_16S,'pa')
+      # mr_16S <- decostand(mr_16S,'pa')
     }
 
     rs <- rowSums(mr)
-    rs_16S <- rowSums(mr_16S)
+    # rs_16S <- rowSums(mr_16S)
     
     # df frac cya vs 16S and cya grp
     cya_grp <- c('Gloeobacterales','Leptolyngbyales','Nostocales','Cyanobacteria')
     
-    df_frac_sgrp <- data.frame(frac=rowSums(mr) / rowSums(mr_16S),
+    df_frac_sgrp <- data.frame(#frac=rowSums(mr) / rowSums(mr_16S),
                                sapply(cya_grp, function(x) rowSums(mr[,grep(x, ass$taxo)])))
     
     #---
-    pdf(paste0(dir_cya, 'frac_sgrp_cya_', h, '_', i, '.pdf'), width=11, height=11)
+    pdf(paste0(dir_cya, 'frac_sgrp_cyaB_', h, '_', i, '.pdf'), width=11, height=11)
     par(mfrow=c(3,2))
 
     for(jn in names(df_frac_sgrp)){
@@ -91,7 +91,7 @@ for(h in c('raw','rrf')){
           } else {
             nb_seq <- tapply(j, list(l), sum)
           }
-          nb_seq_16S <- tapply(rs_16S, list(l), sum)
+          # nb_seq_16S <- tapply(rs_16S, list(l), sum)
           
           # graf args
           if(ln == 'e'){
@@ -135,8 +135,36 @@ for(h in c('raw','rrf')){
   
 }
 
+#####
+# top10
 
-#
+mr  <- lst_comm$cyaB_cl$rrf$mr
+ass <- lst_comm$cyaB_cl$rrf$ass
+env <- lst_comm$cyaB_cl$rrf$env
+
+print(ass[names(tail(sort(colSums(mr)), n=10)),])
+
+lst <- list(otu_tb_cyaB_rrf          = cbind.data.frame(ass$taxo, t(mr)),
+            otu_tb_cyaB_rrf_site     = cbind.data.frame(ass$taxo, t(apply(mr, 2, function(x) tapply(x, list(env$site), sum)))),
+            otu_tb_cyaB_rrf_moisture = cbind.data.frame(ass$taxo, t(apply(mr, 2, function(x) tapply(x, list(env$moisture), sum)))),
+            otu_tb_cyaB_rrf_depth    = cbind.data.frame(ass$taxo, t(apply(mr, 2, function(x) tapply(x, list(env$depth), sum)))),
+            otu_tb_cyaB_rrf_combi    = cbind.data.frame(ass$taxo, t(apply(mr, 2, function(x) tapply(x, list(env$combi), sum)))))
+
+file.fa <- 'Projets/Climarctic/stats/MBC/out/04_cya/cyaB_clean.fa'
+
+if(file.exists(file.fa)){file.remove(file.fa)}
+for(i in 1:nrow(ass)){
+  write.table(paste0('>', row.names(ass)[i], ';', ass$taxo[i]), file.fa, T, F, row.names=F, col.names=F)
+  write.table(ass$seq[i], file.fa, T, F, row.names=F, col.names=F)
+}
+
+save(lst, file='Projets/Climarctic/stats/MBC/out/04_cya/otu_tab_191004.Rdata')
+
+for(i in names(lst)){
+  write.table(lst[[i]], paste0('Projets/Climarctic/stats/MBC/out/04_cya/', i, '.csv'), quote=F, sep='\t')
+}
+
+#####
 
 
 

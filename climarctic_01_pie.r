@@ -30,22 +30,22 @@ for(h in c('raw','rrf')){
   
   # make a 18S version without metazoa or embryophyceae
   p18S <- lst_comm$`18S_V4`[[h]]
-  
+
   ind_ME <- p18S$taxo$V3 == 'Metazoa' | p18S$taxo$V4 == 'Embryophyceae'
-  
+
   p18S$mr   <- p18S$mr[,ind_ME == F]
   p18S$ass  <- p18S$ass[ind_ME == F,]
   p18S$taxo <- droplevels(p18S$taxo[ind_ME == F,])
-  
+
   lst_comm$`18S_V4_no_ME`[[h]] <- p18S
   
   # make a cyano version
   p16S <- lst_comm$`16S_V1-3`[[h]]
   
   ind_cya <- p16S$taxo$V2 == 'Cyanobacteria' &
-    p16S$taxo$V3 != 'Sericytochromatia' &
-    p16S$taxo$V4 != 'Chloroplast' &
-    p16S$taxo$V4 != 'Vampirovibrionales'
+             p16S$taxo$V3 != 'Sericytochromatia' &
+             p16S$taxo$V4 != 'Chloroplast' &
+             p16S$taxo$V4 != 'Vampirovibrionales'
   
   p16S$mr   <- p16S$mr[,ind_cya]
   p16S$ass  <- p16S$ass[ind_cya,]
@@ -55,14 +55,27 @@ for(h in c('raw','rrf')){
   
   # make a proteobact version
   p16S <- lst_comm$`16S_V1-3`[[h]]
-  
+
   ind_cya <- p16S$taxo$V2 == 'Proteobacteria'
-  
+
   p16S$mr   <- p16S$mr[,ind_cya]
   p16S$ass  <- p16S$ass[ind_cya,]
   p16S$taxo <- droplevels(p16S$taxo[ind_cya,])
-  
+
   lst_comm$`16S_V1-3_proteo`[[h]] <- p16S
+  
+  # clean the cyaB
+  pcyaB <- lst_comm$cyaB[[h]]
+  
+  ind_cya <- pcyaB$taxo$V3 != 'Sericytochromatia' &
+             pcyaB$taxo$V4 != 'Chloroplast' &
+             pcyaB$taxo$V4 != 'Vampirovibrionales'  
+  
+  pcyaB$mr   <- pcyaB$mr[,ind_cya]
+  pcyaB$ass  <- pcyaB$ass[ind_cya,]
+  pcyaB$taxo <- droplevels(pcyaB$taxo[ind_cya,])
+
+  lst_comm$cyaB_cl[[h]] <- pcyaB
   
   # pie ####
   for(i in names(lst_comm)){
@@ -70,7 +83,7 @@ for(h in c('raw','rrf')){
     print(i)
     
     tax_lev <- 1:5
-    if(i == '16S_V1-3_cya' | i == '16S_V1-3_proteo'){
+    if(i == '16S_V1-3_cya' | i == '16S_V1-3_proteo' | i == 'cyaB' | i == 'cyaB_cl'){
       tax_lev <- 4:6
     }
     
@@ -114,10 +127,17 @@ for(h in c('raw','rrf')){
                         wet   =which(env$moisture == 'wet'),
                         top   =which(env$depth    == 'top'),
                         deep  =which(env$depth    == 'deep'))
+      
+      if(j == 'abundance'){
+        nb_seq_otu <- parLapply(cl2, selec_smp1, function(x, mr=mr) sum(mr[x,]), mr)
+      } else {
+        nb_seq_otu <- parLapply(cl2, selec_smp1, function(x, mr=mr) length(which(colSums(mr[x,]) != 0)), mr)
+      }
+      
       names(selec_smp1) <- paste0(names(selec_smp1), ' smp nb: ', 
                                   parLapply(cl2, selec_smp1, function(x, mr=mr) nrow(mr[x,]), mr),
                                   ifelse(j == 'abundance', '\nseq nb: ', '\nOTU nb: '), 
-                                  parLapply(cl2, selec_smp1, function(x, mr=mr) sum(mr[x,]), mr))
+                                  nb_seq_otu)
       
       #---
       selec_smp2 <- factor(paste(env$moist_in_site, env$depth, sep='_'))

@@ -60,6 +60,7 @@ env_tot$depth <- factor(env_tot$depth, levels=c('top','deep'))
 env_tot$moist_in_site <- factor(apply(env_tot[,c('moisture','site')], 1, function(x) paste(x, collapse='_')))
 env_tot$plot_in_moist_in_site <- factor(apply(env_tot[,c('plot','moist_in_site')], 1, function(x) paste(x, collapse='_')))
 env_tot$quad_in_plot_in_moist <- factor(apply(env_tot[,c('quadrat','plot_in_moist_in_site')], 1, function(x) paste(x, collapse='_')))
+env_tot$combi <- factor(paste(env_tot$moist_in_site, env_tot$depth, sep='_'))
 
 # palette ----
 lev_site <- levels(env_tot$site)
@@ -77,7 +78,7 @@ permu <- 10000
 
 # loop the primers ####
 prim_names <- c('16S_V1-3','18S_V4','pmoA_mb661','pmoA_A682','ITS2','phoD','nifH', 'cyaB','nirS')
-ind_prim <- c(1,2)
+ind_prim <- c(1,8)
 
 lst_comm <- NULL
 for(i in ind_prim) {
@@ -103,9 +104,12 @@ for(i in ind_prim) {
   # reorganize mr
   n_mr <- sapply(strsplit(names(mr_ini), '_'), '[', 1:2)
   ord <- order(as.numeric(n_mr[2,]))
-  
+
   mr_tot <- mr_ini[,ord]
   names(mr_tot) <- sapply(lapply(strsplit(names(mr_tot), '_'), '[', 1:2), function(x) paste(x, collapse='_'))
+  
+  mr_tot <- mr_tot[grep('T', row.names(mr_tot)),]
+  mr_tot <- mr_tot[,colSums(mr_tot) != 0]
   
   # reorganize fa
   n_fa <- as.character(fa_ini[seq(1,nrow(fa_ini), by=2),])
@@ -118,6 +122,8 @@ for(i in ind_prim) {
   ass_tot <- data.frame(taxo=ass_ini$V2, seq=fa_tot)
   
   ass_tot$taxo <- gsub('[[:punct:]][[:digit:]]{2,3}[[:punct:]]{2}|;', '|', ass_tot$taxo)
+  
+  ass_tot <- ass_tot[names(mr_tot),]
   
   taxo_tot <- strsplit(as.character(ass_tot$taxo), '|' , fixed=T)
   nb_lev <- length(taxo_tot[[1]])
@@ -300,7 +306,7 @@ for(i in 1:7){
 dev.off()
 
 
-#
+#####
 
 
 
