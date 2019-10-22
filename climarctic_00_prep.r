@@ -73,13 +73,14 @@ lst_palev <- list(site    =list(pal=pal_dark2[1:2], lev=lev_site),
                   depth   =list(pal=pal_dark2[6:7], lev=lev_dept)
 )
 
-# permu ----
+# permu and primer names ----
 permu <- 10000
 
-# loop the primers ####
-prim_names <- c('16S_V1-3','18S_V4','pmoA_mb661','pmoA_A682','ITS2','phoD','nifH', 'cyaB','nirS')
-ind_prim <- c(1,8)
+#---
+prim_names <- c('01_16S_V1-3','02_18S_V4','03_pmoA_mb661','04_pmoA_A682','05_ITS2','06_phoD','07_nifH', '08_cyaB','09_nirS')
+ind_prim <- c(1:9)
 
+# loop the primers ####
 lst_comm <- NULL
 for(i in ind_prim) {
   
@@ -96,17 +97,18 @@ for(i in ind_prim) {
     load(file)
   } else {
     mr_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.mr'), h=T)
-    ass_ini <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.DB.wang.taxonomy'), row.names=1)
+    # ass_ini <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.DB.wang.taxonomy'), row.names=1)
     fa_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.fa'))
-    save(mr_ini, ass_ini, fa_ini, file=file)
+    # save(mr_ini, ass_ini, fa_ini, file=file)
+    save(mr_ini, fa_ini, file=file)
   }
   
   # reorganize mr
-  n_mr <- sapply(strsplit(names(mr_ini), '_'), '[', 1:2)
-  ord <- order(as.numeric(n_mr[2,]))
-
-  mr_tot <- mr_ini[,ord]
-  names(mr_tot) <- sapply(lapply(strsplit(names(mr_tot), '_'), '[', 1:2), function(x) paste(x, collapse='_'))
+  mr_tot <- mr_ini[grep('T|B', row.names(mr_ini)),]
+  
+  rs <- rowSums(mr_tot)
+  ord <- order(rs)
+  plot(rs[ord], col=as.numeric(grepl('B', row.names(mr_tot))[ord])+1, pch=19, main=prim_names[i])
   
   mr_tot <- mr_tot[grep('T', row.names(mr_tot)),]
   mr_tot <- mr_tot[,colSums(mr_tot) != 0]
@@ -118,36 +120,38 @@ for(i in ind_prim) {
   fa_tot <- fa_ini[seq(2,nrow(fa_ini), by=2),]
   names(fa_tot) <- n_fa
   
-  # reorganize ass
-  ass_tot <- data.frame(taxo=ass_ini$V2, seq=fa_tot)
+  # # reorganize ass
+  # ass_tot <- data.frame(taxo=ass_ini$V2, seq=fa_tot)
+  # 
+  # ass_tot$taxo <- gsub('[[:punct:]][[:digit:]]{2,3}[[:punct:]]{2}|;', '|', ass_tot$taxo)
+  # 
+  # ass_tot <- ass_tot[names(mr_tot),]
+  # 
+  # taxo_tot <- strsplit(as.character(ass_tot$taxo), '|' , fixed=T)
+  # nb_lev <- length(taxo_tot[[1]])
+  # 
+  # taxo_tot <- matrix(unlist(taxo_tot), ncol=nb_lev, byrow=T)
+  # row.names(taxo_tot) <- row.names(ass_tot)
+  # 
+  # taxo_tot <- as.data.frame(t(apply(taxo_tot, 1, function(x) {
+  #   x <- gsub('Incertae_Sedis', 'X', x)
+  #   x <- gsub('Unknown', 'unknown', x)
+  #   
+  #   ind_unc <- grep('^[[:lower:]]', x)
+  #   for(i in ind_unc){
+  #     x[i] <- ifelse(grepl('_X', x[i-1]), paste0(x[i-1], 'X'), paste0(x[i-1], '_X'))
+  #   }
+  #   return(x)
+  # })))
+  # 
+  # # sort taxo
+  # ord_taxo <- order(ass_tot$taxo)
+  # 
+  # ass_sort <- ass_tot[ord_taxo,]
+  # mr_sort <- mr_tot[,ord_taxo]
+  # taxo_sort <- taxo_tot[ord_taxo,]
   
-  ass_tot$taxo <- gsub('[[:punct:]][[:digit:]]{2,3}[[:punct:]]{2}|;', '|', ass_tot$taxo)
-  
-  ass_tot <- ass_tot[names(mr_tot),]
-  
-  taxo_tot <- strsplit(as.character(ass_tot$taxo), '|' , fixed=T)
-  nb_lev <- length(taxo_tot[[1]])
-  
-  taxo_tot <- matrix(unlist(taxo_tot), ncol=nb_lev, byrow=T)
-  row.names(taxo_tot) <- row.names(ass_tot)
-  
-  taxo_tot <- as.data.frame(t(apply(taxo_tot, 1, function(x) {
-    x <- gsub('Incertae_Sedis', 'X', x)
-    x <- gsub('Unknown', 'unknown', x)
-    
-    ind_unc <- grep('^[[:lower:]]', x)
-    for(i in ind_unc){
-      x[i] <- ifelse(grepl('_X', x[i-1]), paste0(x[i-1], 'X'), paste0(x[i-1], '_X'))
-    }
-    return(x)
-  })))
-  
-  # sort taxo
-  ord_taxo <- order(ass_tot$taxo)
-  
-  ass_sort <- ass_tot[ord_taxo,]
-  mr_sort <- mr_tot[,ord_taxo]
-  taxo_sort <- taxo_tot[ord_taxo,]
+  mr_sort <- mr_tot
   env_sort <- env_tot[row.names(mr_sort),]
   
   # rrarefy ----
@@ -156,13 +160,13 @@ for(i in ind_prim) {
   thresh <- thresh[-length(thresh)]
   
   # nb seq
-  plot(sort(rs))
+  plot(sort(rs), main=prim_names[i])
   abline(h=thresh)
   
   # perc lost
-  set.seed(0)
   perc_lost <- foreach(j=thresh, .combine=cbind, .verbose=T) %dopar% {
     if(nrow(mr_sort[rs >= j,]) > 1){
+      set.seed(0)
       mr_rrf <- rrarefy(mr_sort[rs >= j,], j)
       mr_rrf <- mr_rrf[,colSums(mr_rrf) != 0]
 
@@ -173,8 +177,10 @@ for(i in ind_prim) {
   dimnames(perc_lost) <- list(c('seq','otu','smp'), paste0('t', thresh[1:ncol(perc_lost)]))
   
   l <- NULL
+  op <- NULL
   for(j in c(0.5, 0.75, 1)){
     optimum <- ceiling(mean(apply(perc_lost[-3,], 1, function(x) thresh[which(x == max(x, na.rm=T))])))*j
+    op <- c(op, optimum)
     
     # which smps did we loose
     set.seed(0)
@@ -202,7 +208,7 @@ for(i in ind_prim) {
     lines(thresh[1:ncol(perc_lost)], perc_lost[j,], col=j)
   }
   
-  abline(v=c(optimum, optimum*0.75, optimum*0.5), lty=3)
+  abline(v=op, lty=3)
 
   legend('topright', legend=c('sequence','OTU','sample'), text.col=1:3, bty='n')
   
@@ -210,17 +216,28 @@ for(i in ind_prim) {
   
   #---
   set.seed(0)
-  mr_rrf <- rrarefy(mr_sort[rs >= optimum,], optimum)
+  mr_rrf <- rrarefy(mr_sort[rs >= op[3],], optimum)
   mr_rrf <- as.data.frame(mr_rrf[,colSums(mr_rrf) != 0])
   
   env_rrf <- env_tot[row.names(mr_rrf),]
   
-  ass_rrf <- ass_sort[names(mr_rrf),]
-  taxo_rrf <- taxo_sort[names(mr_rrf),]
+  # ass_rrf <- ass_sort[names(mr_rrf),]
+  # taxo_rrf <- taxo_sort[names(mr_rrf),]
+
+  #---  
+  set.seed(0)
+  mr_rrf2 <- rrarefy(mr_sort[rs >= op[1],], optimum)
+  mr_rrf2 <- as.data.frame(mr_rrf2[,colSums(mr_rrf2) != 0])
   
-  lst_comm[[prim_names[i]]] <- list(raw=list(env=env_sort, mr=mr_sort, ass=ass_sort, taxo=taxo_sort),
-                                    rrf=list(env=env_rrf,  mr=mr_rrf,  ass=ass_rrf,  taxo=taxo_rrf))
+  env_rrf2 <- env_tot[row.names(mr_rrf2),]
   
+  # ass_rrf2 <- ass_sort[names(mr_rrf2),]
+  # taxo_rrf2 <- taxo_sort[names(mr_rrf2),]
+  
+  lst_comm[[prim_names[i]]] <- list(raw=list(env=env_sort, mr=mr_sort),#, ass=ass_sort, taxo=taxo_sort),
+                                    rrf=list(env=env_rrf,  mr=mr_rrf),#,  ass=ass_rrf,  taxo=taxo_rrf),
+                                    rrf2=list(env=env_rrf2,  mr=mr_rrf2))#,  ass=ass_rrf2,  taxo=taxo_rrf2))
+
 }
 
 #---
@@ -230,38 +247,7 @@ save(lst_comm, env_tot, lst_palev, permu, file=file)
 file <- paste0(dir_save, '00_env_tot.Rdata')
 save(env_tot, file=file)
 
-
-# stat bioinfo ####
-
-# perc lost----
-stat <- read.table('Projets/Climarctic/bioinfo/archive/190901/stat.csv', head=T, sep='\t', row.names=1)
-
-lst_stat <- list(raw=stat, perc=as.data.frame(sapply(stat, function(x) x/x[1])))
-row.names(lst_stat$perc) <- row.names(lst_stat$raw)
-
-#---
-postscript(paste0(dir_prep, 'perc_loss.eps'), width=15, height=7,
-           paper='special', horizontal=F)
-par(mfrow=c(1,2))
-
-pal <- brewer.pal(7, 'Set1')
-
-for(i in seq_along(lst_stat)){
-  l <- lst_stat[[i]]
-  plot(NA, xlim=c(1,nrow(l)), ylim=range(l, na.rm=T), ylab=ifelse(i == 1, 'nb seq','% lost'),
-       xaxt='n', xlab='', log=ifelse(i == 1, 'y',''))
-  axis(1, at=1:nrow(l),labels=row.names(l), las=2)
-  
-  for(j in seq_along(l)){
-    lines(l[j], col=pal[j])
-  }
-  
-  legend('bottomleft', legend=names(l), text.col=pal, bty='n')
-}  
-
-dev.off()
-
-# length distro ----
+# check length distro ####
 
 lst_lim <- list(`16S_V1-3`=c(450,570),
                 `18S_V4`=c(380,480),
@@ -270,40 +256,99 @@ lst_lim <- list(`16S_V1-3`=c(450,570),
                 ITS=c(270,500),
                 phoD=c(330,450),
                 nifH=c(310,450),
-                cyaB=c(),
-                nirS=c())
+                cyaB=c(390,470),
+                nirS=c(380,460))
 
 pdf(paste0(dir_prep, 'lgt_distro.pdf'), width=15, height=15)
 par(mfrow=c(3,3))
 
-for(i in 1:7){
-  lgt_dis <- unlist(read.table(paste0('Projets/Climarctic/bioinfo/archive/next/0', i, '/01pear/distro_tot')))
+for(i in ind_prim){
+  lst_file <- list.files(paste0('Projets/Climarctic/bioinfo/archive/191019_all_clustering/0', i, '/filter_test/distro_test'), full.names=T)
+  
+  lgt_dis <- NULL
+  for(j in lst_file){
+    lgt_dis <- c(lgt_dis, unlist(read.table(j)))
+  }
+  
   hist(lgt_dis, breaks=50, main=names(lst_lim)[i])
   abline(v=lst_lim[[i]])
 }
 
 dev.off()
 
-# filter vs trunc
-pdf(paste0(dir_prep, 'filter_vs_trunc.pdf'), width=15, height=15)
-par(mfrow=c(3,3))
+# check bioinfo output ####
 
-for(i in 1:7){
-  nb_seq_step <- read.table(paste0('Projets/Climarctic/bioinfo/archive/next/0', i, '/02fastq_filter/filter_test'))
+pdf(paste0(dir_prep, 'bioinfo_check.pdf'), width=15, height=20)
+par(mfrow=c(5,4))
+
+ra_tot <- NULL
+for(i in seq_along(prim_names[ind_prim])){
+  out_bf <- read.table(paste0('Projets/Climarctic/bioinfo/archive/191019_all_clustering/filter_test/cnt_output/cnt_output', i),
+                       h=T, sep='\t', row.names=1)
   
-  nb_seq_step <- t(apply(nb_seq_step, 1, function(x) x/x[1]))
+  out_bf <- out_bf[order(row.names(out_bf)),]
+
+  B <- switch(i,
+              190,
+              127,
+              NULL,
+              NULL,
+              121:129,
+              107:109,
+              72:74,
+              82:84,
+              96:99)
   
-  #---
-  plot(NA, xlim=c(1,4), ylim=range(nb_seq_step), ylab='nb_seq', xaxt='n', xlab='', main=prim_names[i])
-  axis(1, at=1:ncol(nb_seq_step), labels=c('raw','pear','no trunc','trunc'))
+  cs <- colSums(out_bf, na.rm=T)  
+  out_bf <- rbind.data.frame(out_bf, cs)
   
-  for(j in 1:nrow(nb_seq_step)){
-    lines(1:4, nb_seq_step[j,])
+  lst <- list(raw=out_bf, relabu=decostand(out_bf, 'max', 1, na.rm=T))
+  
+  ra_tot <- cbind(ra_tot, cbind(cs, decostand(cs, 'max')))
+  
+  for(jn in names(lst)){
+    j <- lst[[jn]]
+    
+    plot(NA, xlim=c(1,ncol(j)), xaxt='n', xlab='', 
+         ylim=range(j, na.rm=T), ylab=ifelse(jn == 'raw', 'nb seq', '% nb_seq'),
+         log=ifelse(jn == 'raw', 'y', ''), main=paste(jn, prim_names[i]))
+    axis(1, at=1:ncol(j), labels=names(j))
+    
+    for(k in 1:nrow(j)){
+      kb <- k %in% B
+      if(kb) print(k)
+      
+      col <- ifelse(kb, 2, 1)
+      col <- col2rgb(col)/255
+      col <- rgb(col[1],col[2],col[3],alpha=ifelse(kb, 1, 0.1))
+      
+      lines(1:5, j[k,], col=col)
+    }  
+  }
+}
+
+# total
+pal_prim <- brewer.pal(9, 'Set1') 
+
+for(i in 1:2){
+  ind <- seq(i, 18, by=2)
+  
+  df <- as.data.frame(t(ra_tot[,ind]))
+  
+  plot(NA, xlim=c(1,ncol(df)), xaxt='n', xlab='', 
+       ylim=range(df, na.rm=T), ylab=ifelse(i == 1, 'nb seq', '%nb_seq'),
+       log=ifelse(i == 1, '', 'y'), main=paste(c('raw','relabu')[i], 'total dataset'))
+  axis(1, at=1:ncol(df), labels=names(df))
+  
+  for(j in 1:nrow(df)){
+    lines(1:5, df[j,], col=pal_prim[j])
   }
   
+  legend('bottomleft', legend=prim_names, pch=19, col=pal_prim, bty='n')
 }
 
 dev.off()
+
 
 
 #####
