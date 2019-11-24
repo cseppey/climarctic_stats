@@ -78,7 +78,7 @@ permu <- 10000
 
 #---
 prim_names <- c('01_16S_V1-3','02_18S_V4','03_pmoA_mb661','04_pmoA_A682','05_ITS2','06_phoD','07_nifH', '08_cyaB','09_nirS')
-ind_prim <- c(1:9)
+ind_prim <- c(1:2)
 
 # loop the primers ####
 lst_comm <- NULL
@@ -97,10 +97,9 @@ for(i in ind_prim) {
     load(file)
   } else {
     mr_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.mr'), h=T)
-    # ass_ini <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.DB.wang.taxonomy'), row.names=1)
+    ass_ini <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.DB.wang.taxonomy'), row.names=1)
     fa_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.fa'))
-    # save(mr_ini, ass_ini, fa_ini, file=file)
-    save(mr_ini, fa_ini, file=file)
+    save(mr_ini, ass_ini, fa_ini, file=file) 
   }
   
   # reorganize mr
@@ -113,45 +112,47 @@ for(i in ind_prim) {
   mr_tot <- mr_tot[grep('T', row.names(mr_tot)),]
   mr_tot <- mr_tot[,colSums(mr_tot) != 0]
   
+  print(c(sum(mr_tot), ncol(mr_tot)))
+
   # reorganize fa
   n_fa <- as.character(fa_ini[seq(1,nrow(fa_ini), by=2),])
   n_fa <- substr(n_fa, 2, nchar(n_fa))
-  
+
   fa_tot <- fa_ini[seq(2,nrow(fa_ini), by=2),]
   names(fa_tot) <- n_fa
+
+  # reorganize ass
+  ass_tot <- data.frame(taxo=ass_ini$V2, seq=fa_tot)
+
+  ass_tot$taxo <- gsub('[[:punct:]][[:digit:]]{2,3}[[:punct:]]{2}|;', '|', ass_tot$taxo)
+
+  ass_tot <- ass_tot[names(mr_tot),]
+
+  taxo_tot <- strsplit(as.character(ass_tot$taxo), '|' , fixed=T)
+  nb_lev <- length(taxo_tot[[1]])
+
+  taxo_tot <- matrix(unlist(taxo_tot), ncol=nb_lev, byrow=T)
+  row.names(taxo_tot) <- row.names(ass_tot)
+
+  taxo_tot <- as.data.frame(t(apply(taxo_tot, 1, function(x) {
+    x <- gsub('Incertae_Sedis', 'X', x)
+    x <- gsub('Unknown', 'unknown', x)
+
+    ind_unc <- grep('^[[:lower:]]', x)
+    for(i in ind_unc){
+      x[i] <- ifelse(grepl('_X', x[i-1]), paste0(x[i-1], 'X'), paste0(x[i-1], '_X'))
+    }
+    return(x)
+  })))
+
+  # sort taxo
+  ord_taxo <- order(ass_tot$taxo)
+
+  ass_sort <- ass_tot[ord_taxo,]
+  mr_sort <- mr_tot[,ord_taxo]
+  taxo_sort <- taxo_tot[ord_taxo,]
   
-  # # reorganize ass
-  # ass_tot <- data.frame(taxo=ass_ini$V2, seq=fa_tot)
-  # 
-  # ass_tot$taxo <- gsub('[[:punct:]][[:digit:]]{2,3}[[:punct:]]{2}|;', '|', ass_tot$taxo)
-  # 
-  # ass_tot <- ass_tot[names(mr_tot),]
-  # 
-  # taxo_tot <- strsplit(as.character(ass_tot$taxo), '|' , fixed=T)
-  # nb_lev <- length(taxo_tot[[1]])
-  # 
-  # taxo_tot <- matrix(unlist(taxo_tot), ncol=nb_lev, byrow=T)
-  # row.names(taxo_tot) <- row.names(ass_tot)
-  # 
-  # taxo_tot <- as.data.frame(t(apply(taxo_tot, 1, function(x) {
-  #   x <- gsub('Incertae_Sedis', 'X', x)
-  #   x <- gsub('Unknown', 'unknown', x)
-  #   
-  #   ind_unc <- grep('^[[:lower:]]', x)
-  #   for(i in ind_unc){
-  #     x[i] <- ifelse(grepl('_X', x[i-1]), paste0(x[i-1], 'X'), paste0(x[i-1], '_X'))
-  #   }
-  #   return(x)
-  # })))
-  # 
-  # # sort taxo
-  # ord_taxo <- order(ass_tot$taxo)
-  # 
-  # ass_sort <- ass_tot[ord_taxo,]
-  # mr_sort <- mr_tot[,ord_taxo]
-  # taxo_sort <- taxo_tot[ord_taxo,]
-  
-  mr_sort <- mr_tot
+  # mr_sort <- mr_tot
   env_sort <- env_tot[row.names(mr_sort),]
   
   # rrarefy ----
@@ -216,27 +217,31 @@ for(i in ind_prim) {
   
   #---
   set.seed(0)
-  mr_rrf <- rrarefy(mr_sort[rs >= op[3],], optimum)
+  mr_rrf <- rrarefy(mr_sort[rs >= op[3],], op[3])
   mr_rrf <- as.data.frame(mr_rrf[,colSums(mr_rrf) != 0])
   
   env_rrf <- env_tot[row.names(mr_rrf),]
   
-  # ass_rrf <- ass_sort[names(mr_rrf),]
-  # taxo_rrf <- taxo_sort[names(mr_rrf),]
+  fa_rrf <- fa_tot[names(fa_tot) %in% names(mr_rrf)]
+  
+  ass_rrf <- ass_sort[names(mr_rrf),]
+  taxo_rrf <- taxo_sort[names(mr_rrf),]
 
   #---  
   set.seed(0)
-  mr_rrf2 <- rrarefy(mr_sort[rs >= op[1],], optimum)
+  mr_rrf2 <- rrarefy(mr_sort[rs >= op[1],], op[1])
   mr_rrf2 <- as.data.frame(mr_rrf2[,colSums(mr_rrf2) != 0])
   
   env_rrf2 <- env_tot[row.names(mr_rrf2),]
   
-  # ass_rrf2 <- ass_sort[names(mr_rrf2),]
-  # taxo_rrf2 <- taxo_sort[names(mr_rrf2),]
+  fa_rrf2 <- fa_tot[names(fa_tot) %in% names(mr_rrf2)]
   
-  lst_comm[[prim_names[i]]] <- list(raw=list(env=env_sort, mr=mr_sort),#, ass=ass_sort, taxo=taxo_sort),
-                                    rrf=list(env=env_rrf,  mr=mr_rrf),#,  ass=ass_rrf,  taxo=taxo_rrf),
-                                    rrf2=list(env=env_rrf2,  mr=mr_rrf2))#,  ass=ass_rrf2,  taxo=taxo_rrf2))
+  ass_rrf2 <- ass_sort[names(mr_rrf2),]
+  taxo_rrf2 <- taxo_sort[names(mr_rrf2),]
+  
+  lst_comm[[prim_names[i]]] <- list(raw= list(env=env_sort, mr=mr_sort, ass=ass_sort, taxo=taxo_sort),
+                                    rrf= list(env=env_rrf , mr=mr_rrf , ass=ass_rrf , taxo=taxo_rrf),
+                                    rrf2=list(env=env_rrf2, mr=mr_rrf2, ass=ass_rrf2, taxo=taxo_rrf2))
 
 }
 
@@ -264,12 +269,12 @@ par(mfrow=c(3,3))
 
 for(i in ind_prim){
   lst_file <- list.files(paste0('Projets/Climarctic/bioinfo/archive/191019_all_clustering/0', i, '/filter_test/distro_test'), full.names=T)
-  
+
   lgt_dis <- NULL
   for(j in lst_file){
     lgt_dis <- c(lgt_dis, unlist(read.table(j)))
   }
-  
+
   hist(lgt_dis, breaks=50, main=names(lst_lim)[i])
   abline(v=lst_lim[[i]])
 }
@@ -283,9 +288,9 @@ par(mfrow=c(5,4))
 
 ra_tot <- NULL
 for(i in seq_along(prim_names[ind_prim])){
-  out_bf <- read.table(paste0('Projets/Climarctic/bioinfo/archive/191019_all_clustering/filter_test/cnt_output/cnt_output', i),
+  out_bf <- read.table(paste0('Projets/Climarctic/bioinfo/archive/next/filter_test/cnt_output/cnt_output', i),
                        h=T, sep='\t', row.names=1)
-  
+
   out_bf <- out_bf[order(row.names(out_bf)),]
 
   B <- switch(i,
@@ -298,53 +303,63 @@ for(i in seq_along(prim_names[ind_prim])){
               72:74,
               82:84,
               96:99)
-  
-  cs <- colSums(out_bf, na.rm=T)  
+
+  cs <- colSums(out_bf, na.rm=T)
   out_bf <- rbind.data.frame(out_bf, cs)
-  
+
   lst <- list(raw=out_bf, relabu=decostand(out_bf, 'max', 1, na.rm=T))
-  
+
   ra_tot <- cbind(ra_tot, cbind(cs, decostand(cs, 'max')))
+
+  #---
+  pdf(paste0(dir_prep, 'bioinfo_check_', i, '.pdf'), width=8, height=4)
+  par(mfrow=c(1,2))
   
   for(jn in names(lst)){
     j <- lst[[jn]]
-    
-    plot(NA, xlim=c(1,ncol(j)), xaxt='n', xlab='', 
+
+    plot(NA, xlim=c(1,ncol(j)), xaxt='n', xlab='',
          ylim=range(j, na.rm=T), ylab=ifelse(jn == 'raw', 'nb seq', '% nb_seq'),
          log=ifelse(jn == 'raw', 'y', ''), main=paste(jn, prim_names[i]))
-    axis(1, at=1:ncol(j), labels=names(j))
-    
+    axis(1, at=1:ncol(j), labels=names(j), las=2)
+
     for(k in 1:nrow(j)){
       kb <- k %in% B
       if(kb) print(k)
-      
+
       col <- ifelse(kb, 2, 1)
       col <- col2rgb(col)/255
       col <- rgb(col[1],col[2],col[3],alpha=ifelse(kb, 1, 0.1))
-      
+
       lines(1:5, j[k,], col=col)
-    }  
+    }
   }
+  
+  dev.off()
 }
 
 # total
-pal_prim <- brewer.pal(9, 'Set1') 
+
+pdf(paste0(dir_prep, 'bioinfo_check_tot.pdf'), width=8, height=4)
+par(mfrow=c(1,2))
+
+pal_prim <- brewer.pal(9, 'Set1')
 
 for(i in 1:2){
   ind <- seq(i, 18, by=2)
-  
+
   df <- as.data.frame(t(ra_tot[,ind]))
-  
-  plot(NA, xlim=c(1,ncol(df)), xaxt='n', xlab='', 
+
+  plot(NA, xlim=c(1,ncol(df)), xaxt='n', xlab='',
        ylim=range(df, na.rm=T), ylab=ifelse(i == 1, 'nb seq', '%nb_seq'),
        log=ifelse(i == 1, '', 'y'), main=paste(c('raw','relabu')[i], 'total dataset'))
-  axis(1, at=1:ncol(df), labels=names(df))
-  
+  axis(1, at=1:ncol(df), labels=names(df), las=2)
+
   for(j in 1:nrow(df)){
     lines(1:5, df[j,], col=pal_prim[j])
   }
-  
-  legend('bottomleft', legend=prim_names, pch=19, col=pal_prim, bty='n')
+
+  if(i == 2)legend('bottomleft', legend=prim_names, pch=19, col=pal_prim, bty='n', cex=0.5)
 }
 
 dev.off()
