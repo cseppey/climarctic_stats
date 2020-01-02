@@ -29,9 +29,10 @@ file <- paste0(dir_save, '01_lst_comm.Rdata')
 load(file)
 
 fact_3 <- c('depth','site','moisture')
+#
 
-# loop on raw and rraref
-for(h in c('raw','rrf')){
+# loop on raw and rraref ####
+for(h in c('raw','rrf', 'rrf2')){
   
   print(h)
   
@@ -135,8 +136,7 @@ for(h in c('raw','rrf')){
   
 }
 
-#####
-# top10
+# top10 ####
 
 mr  <- lst_comm$cyaB_cl$rrf$mr
 ass <- lst_comm$cyaB_cl$rrf$ass
@@ -164,19 +164,140 @@ for(i in names(lst)){
   write.table(lst[[i]], paste0('Projets/Climarctic/stats/MBC/out/04_cya/', i, '.csv'), quote=F, sep='\t')
 }
 
+# relabu 23 oct 2019 ####
+
+mr <- lst_comm$`08_cyaB`$raw$mr
+fa <- lst_comm$`08_cyaB`$raw$fa
+
+relabu <- decostand(mr, 'total')
+
+write.table(cbind.data.frame(fa=fa, t(relabu)), paste0(dir_cya, 'cyaB_seq_relabu.csv'), quote=F, sep='\t')
+
+write.table(cbind.data.frame(fa=fa, t(mr)), paste0(dir_cya, 'cyaB_seq_raw.csv'), quote=F, sep='\t')
+
+
+
+# MEETING IN ROSTOCK ####
+# dominant vs other datasets ####
+
+# tree
+
+require(ape)
+
+for(i in c('_trim_V1-3','_no_V1-3','-antar')){
+  tree <- read.tree(paste0('Projets/Climarctic/bioinfo/Katya_cyaB/01_dominant_cya_vs_other_dataset/RAxML_bestTree.out', i))
+  
+  pdf(paste0('Projets/Climarctic/stats/MBC/out/04_cya/phylo_climarctic_vs_other', i, '.pdf'), width=10, height=20)
+  
+  plus <- ifelse(i == '_trim_V1-3', 0, 1)
+  
+  plot(tree, tip.color=as.numeric(factor(sapply(strsplit(tree$tip.label, '_'), '[[', 1))) + plus,
+       align.tip.label=T)
+  
+  dev.off()
+}
+
+# match with alignment
+
+blst <- read.table('Projets/Climarctic/bioinfo/Katya_cyaB/01_dominant_cya_vs_other_dataset/03_pwaln/out.blst')
+
+names(blst) <- c('qname','sname','pid','length','mismatch','gapopen',
+                 'qstart','qend','sstart','send','evalue','bitscore')
+
+lin <- read.table('Projets/Climarctic/bioinfo/Katya_cyaB/01_dominant_cya_vs_other_dataset/01_msaln/tot.lin')
+
+lin$V2 <- substr(as.character(lin$V2), 2, nchar(as.character(lin$V2)))
+
+blst_mat <- as.matrix(blst)
+
+file <- 'Projets/Climarctic/stats/MBC/out/04_cya/top10.csv'
+if(file.exists(file)){file.remove(file)}
+
+for(i in lin$V2){
+  top10 <- blst$sname[blst$qname == i]
+  for(j in top10){
+    write.table(t(c(as.character(lin$V1[lin$V2 == j]),
+                  blst_mat[blst_mat[,1] == i & blst_mat[,2] == j,])), 
+                quote=F, append=T, file=file, row.names=F, col.names=F)
+  }
+}
+
+
+# cyaB vs 16S ####
+
+# cyaB ---
+# mr and ass
+
+mr_ass_cyaB <- read.table('Projets/Climarctic/papers/Katya_cyanobact/Cyano_CyaB.csv', h=T, sep='\t', row.names=1)
+
+ass_cyaB <- mr_ass_cyaB[-nrow(mr_ass_cyaB),72:ncol(mr_ass_cyaB)]
+mr_cyaB <- as.data.frame(t(mr_ass_cyaB[-nrow(mr_ass_cyaB),1:71]))
+
+# seq
+seq_cyaB_in <- read.table('Projets/Climarctic/stats/MBC/in/from_cluster/08/08_clust.fa')
+
+n <- as.character(seq_cyaB_in[seq(1, nrow(seq_cyaB_in), by=2),1])
+n <- substr(n, 2, nchar(n))
+
+seq_cyaB <- as.character(seq_cyaB_in[seq(2, nrow(seq_cyaB_in), by=2),1])
+
+names(seq_cyaB) <- n
+
+seq_cyaB <- seq_cyaB[names(seq_cyaB) %in% names(mr_cyaB)]
+
+# reorder and rename
+mr_cyaB <- mr_cyaB[,order(names(mr_cyaB))]
+seq_cyaB <- seq_cyaB[order(names(seq_cyaB))]
+
+names(seq_cyaB) <- sub('X_', 'cyaB_', names(seq_cyaB))
+
+
+# 16S ---
+# mr and ass
+
+mr_ass_16S <- read.table('Projets/Climarctic/papers/Katya_cyanobact/Cyano_16S.csv', h=T, sep='\t', row.names=1)
+
+ass_16S <- mr_ass_16S[-nrow(mr_ass_16S),83:ncol(mr_ass_16S)]
+mr_16S <- as.data.frame(t(mr_ass_16S[-nrow(mr_ass_16S),1:82]))
+
+names(mr_16S) <- sub('OTU_', 'X_', names(mr_16S))
+
+# seq
+seq_16S <- as.character(lst_comm$`01_16S_V1-3`$raw$ass$seq)
+
+names(seq_16S) <- row.names(lst_comm$`01_16S_V1-3`$raw$ass)
+
+seq_16S <- seq_16S[names(seq_16S) %in% names(mr_16S)]
+
+# reorder and rename
+mr_16S <- mr_16S[,order(names(mr_16S))]
+seq_16S <- seq_16S[order(names(seq_16S))]
+
+names(seq_16S) <- sub('X_','16S_', names(seq_16S))
+
+# write the .fa ---
+cya_tot <- c(seq_cyaB, seq_16S)
+
+file <- paste0(dir_cya, 'cyano_kat_identified.fa')
+if(file.exists(file)){file.remove(file)}
+
+for(i in seq_along(cya_tot)){
+  write.table(paste0('>', names(cya_tot[i])), file, T, F, row.names=F, col.names=F)
+  write.table(cya_tot[i], file, T, F, row.names=F, col.names=F)
+}
+
+# align the fasta with clustalo and build the tree with raxmls
+
+
+tree <- read.tree('Projets/Climarctic/bioinfo/Katya_cyaB/02_cyaB_vs_16S/01_msaln/RAxML_bestTree.out')
+
+pdf('Projets/Climarctic/stats/MBC/out/04_cya/phylo_cyaB_vs_16S.pdf', width=10, height=100)
+
+plot(tree, tip.color=c(1,3)[as.numeric(factor(sapply(strsplit(tree$tip.label, '_'), '[[', 1)))],
+     align.tip.label=T, cex=0.2)
+
+dev.off()
 #####
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

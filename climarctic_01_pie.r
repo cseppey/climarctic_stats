@@ -24,68 +24,25 @@ load(file)
 
 # loop on raw and rraref
 lst_pie <- NULL
-for(h in c('raw','rrf')){
+for(h in c('raw','rrf2','rrf')){
   
   print(h)
-  
-  # make a 18S version without metazoa or embryophyceae
-  p18S <- lst_comm$`18S_V4`[[h]]
 
-  ind_ME <- p18S$taxo$V3 == 'Metazoa' | p18S$taxo$V4 == 'Embryophyceae'
-
-  p18S$mr   <- p18S$mr[,ind_ME == F]
-  p18S$ass  <- p18S$ass[ind_ME == F,]
-  p18S$taxo <- droplevels(p18S$taxo[ind_ME == F,])
-
-  lst_comm$`18S_V4_no_ME`[[h]] <- p18S
-  
-  # make a cyano version
-  p16S <- lst_comm$`16S_V1-3`[[h]]
-  
-  ind_cya <- p16S$taxo$V2 == 'Cyanobacteria' &
-             p16S$taxo$V3 != 'Sericytochromatia' &
-             p16S$taxo$V4 != 'Chloroplast' &
-             p16S$taxo$V4 != 'Vampirovibrionales'
-  
-  p16S$mr   <- p16S$mr[,ind_cya]
-  p16S$ass  <- p16S$ass[ind_cya,]
-  p16S$taxo <- droplevels(p16S$taxo[ind_cya,])
-  
-  lst_comm$`16S_V1-3_cya`[[h]] <- p16S
-  
-  # make a proteobact version
-  p16S <- lst_comm$`16S_V1-3`[[h]]
-
-  ind_cya <- p16S$taxo$V2 == 'Proteobacteria'
-
-  p16S$mr   <- p16S$mr[,ind_cya]
-  p16S$ass  <- p16S$ass[ind_cya,]
-  p16S$taxo <- droplevels(p16S$taxo[ind_cya,])
-
-  lst_comm$`16S_V1-3_proteo`[[h]] <- p16S
-  
-  # clean the cyaB
-  pcyaB <- lst_comm$cyaB[[h]]
-  
-  ind_cya <- pcyaB$taxo$V3 != 'Sericytochromatia' &
-             pcyaB$taxo$V4 != 'Chloroplast' &
-             pcyaB$taxo$V4 != 'Vampirovibrionales'  
-  
-  pcyaB$mr   <- pcyaB$mr[,ind_cya]
-  pcyaB$ass  <- pcyaB$ass[ind_cya,]
-  pcyaB$taxo <- droplevels(pcyaB$taxo[ind_cya,])
-
-  lst_comm$cyaB_cl[[h]] <- pcyaB
-  
   # pie ####
   for(i in names(lst_comm)){
 
     print(i)
     
-    tax_lev <- 1:5
-    if(i == '16S_V1-3_cya' | i == '16S_V1-3_proteo' | i == 'cyaB' | i == 'cyaB_cl'){
-      tax_lev <- 4:6
-    }
+    tax_lev <- switch(i,
+                      "01_16S_V1-3"   = 1:5,
+                      "02_18S_V4"     = 1:5,
+                      "03_pmoA_mb661" = 4:7,
+                      "04_pmoA_A682"  = 4:7,
+                      "05_ITS2"       = 1:5,
+                      "06_phoD"       = 1:4,
+                      "07_nifH"       = 1:4,
+                      "08_cyaB"       = 4:6,
+                      "09_nirS"       = 1:4)
     
     #---
     mr <- lst_comm[[i]][[h]]$mr
@@ -129,9 +86,9 @@ for(h in c('raw','rrf')){
                         deep  =which(env$depth    == 'deep'))
       
       if(j == 'abundance'){
-        nb_seq_otu <- parLapply(cl2, selec_smp1, function(x, mr=mr) sum(mr[x,]), mr)
+        nb_seq_otu <- parLapply(cl2, selec_smp1, function(x, mr=mr) if(length(x)){return(sum(mr[x,]))}, mr)
       } else {
-        nb_seq_otu <- parLapply(cl2, selec_smp1, function(x, mr=mr) length(which(colSums(mr[x,]) != 0)), mr)
+        nb_seq_otu <- parLapply(cl2, selec_smp1, function(x, mr=mr) if(length(x)){return(length(which(colSums(mr[x,]) != 0)))}, mr)
       }
       
       names(selec_smp1) <- paste0(names(selec_smp1), ' smp nb: ', 
@@ -141,19 +98,24 @@ for(h in c('raw','rrf')){
       
       #---
       selec_smp2 <- factor(paste(env$moist_in_site, env$depth, sep='_'))
-      lev <- levels(selec_smp2)
+      lev <- apply(expand.grid(levels(env$moist_in_site), levels(env$depth)),
+                                         1, function(x) paste(x, collapse='_'))
       selec_smp2 <- as.character(selec_smp2)
       
       rs <- rowSums(mr)
         
+      ltot <- NULL
       for(k in lev){
         cond <- strsplit(k, '_')[[1]]
         ind <- which(env$moisture == cond[1] & env$site == cond[2] & env$depth == cond[3])
-        selec_smp2[ind] <- paste0(k, '\nsmp nb: ', length(ind), 
-                                  ifelse(j == 'abundance', ' seq nb: ', ' OTU nb: '), sum(rs[ind]))
+        ltot <- c(ltot, paste0(k, '\nsmp nb: ', length(ind),
+                               ifelse(j == 'abundance', ' seq nb: ', ' OTU nb: '), sum(rs[ind])))
+        if(length(ind)){
+          selec_smp2[ind] <- ltot[length(ltot)]
+        }
       }
       
-      selec_smp2 <- as.factor(selec_smp2)
+      selec_smp2 <- factor(selec_smp2, levels=ltot)
       
       # arrange the layout for the per smp
       lay <- NULL
@@ -167,18 +129,37 @@ for(h in c('raw','rrf')){
         }
       }
       
+      mat_per_smp <- matrix(lay, ncol=6, byrow=T)
+      mat_per_smp <- rbind(mat_per_smp[,1:3],mat_per_smp[,4:6])
+      
+      mat_per_smp2 <- NULL
+      for(k in 1:12){
+        mat_per_smp2 <- cbind(mat_per_smp2, mat_per_smp[(k*3-2):(k*3),])
+      }
+      mat_per_smp <- NULL
+      for(k in 1:4){
+        mat_per_smp <- rbind(mat_per_smp, mat_per_smp2[,(k*9-8):(k*9)])
+      }
+      mat_per_smp <- cbind(mat_per_smp[1:6,], mat_per_smp[7:12,])
+      rm(mat_per_smp2)
+      
       # arg pie
-      lst_arg_pie <- list(per_fact  =list(selec_smp=selec_smp1,
+      lst_arg_pie <- list(tot       =list(selec_smp=factor(rep(paste0('top\nsmp_nb: ', nrow(mr), ' seq nb: ', sum(mr)), nrow(mr))),
+                                          mat_lay=matrix(c(0,1,2,0), nrow=1),
+                                          wdt_lay=c(0.1,1,2,0.1), hei_lay=c(1.5),
+                                          wdt=7, hei=6),
+                          per_fact  =list(selec_smp=selec_smp1,
                                           mat_lay=matrix(c(0,1,2,8, 3:5,8, 0,6,7,8), nrow=3, byrow=T),
                                           wdt_lay=c(1,1,1,3), hei_lay=c(rep(1.1, 3)),
                                           wdt=15, hei=7),
                           cross_fact=list(selec_smp=selec_smp2,
-                                          mat_lay=matrix(c(1:4,13, 5:8,13, 9:12,13), nrow=3, byrow=T),
+                                          mat_lay=matrix(c(1,2,7,8,13, 3,4,9,10,13, 5,6,11,12,13), nrow=3, byrow=T),
                                           wdt_lay=c(1,1,1,1, 3), hei_lay=c(rep(1.1, 3)),
                                           wdt=15, hei=7),
-                          per_smp   =list(selec_smp=factor(paste0(row.names(mr), ifelse(j == 'abundance', ' nb seq: ', ' OTU nb: '),
+                          per_smp   =list(selec_smp=factor(paste0(row.names(mr), 
+                                                                  ifelse(j == 'abundance', ' nb seq: ', ' OTU nb: '),
                                                                   rowSums(mr), '\n', env$moist_in_site, '_', env$depth)),
-                                          mat_lay=cbind(matrix(lay, nrow=6, byrow=T), rep(max(lay)+1, 6))[,c(1:3,7:9,13:15, 4:6,10:12,16:18, 19)],
+                                          mat_lay=cbind(mat_per_smp, rep(max(lay)+1, nrow(mat_per_smp))),
                                           wdt_lay=c(rep(1, 18), 3), hei_lay=c(rep(1.1,6)),
                                           wdt=57, hei=18)
       )
@@ -187,16 +168,18 @@ for(h in c('raw','rrf')){
       lst_pie2 <- foreach(k=rev(seq_along(lst_arg_pie)), .verbose=T) %dopar% {
         kn <- names(lst_arg_pie)[k]
         kl <- lst_arg_pie[[k]]
+
+        source('bin/src/my_prog/R/pie_taxo.r')
         
         # pdf(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.pdf'), width=kl$wdt, height=kl$hei)
         cairo_ps(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.eps'), width=kl$wdt, height=kl$hei)
         
-        pie <- pie_taxo(mr, taxo, tax_lev, kl$selec_smp, mat_lay=kl$mat_lay,
-                        wdt_lay=kl$wdt_lay, hei_lay=kl$hei_lay, last_tax_text=F)
-        
-        return(pie)
+        pie <- pie_taxo(decostand(mr, 'total'), taxo, tax_lev, kl$selec_smp, mat_lay=kl$mat_lay, cex=1.2, box=F, thresh=0.02,
+                        wdt_lay=kl$wdt_lay, hei_lay=kl$hei_lay, info_perc=F, rshift=0.0, last_tax_text=F)
         
         dev.off()
+        
+        return(pie)
       }
       
       names(lst_pie2) <- rev(names(lst_arg_pie))
@@ -206,6 +189,8 @@ for(h in c('raw','rrf')){
       
       return(lst_pie2)
     }
+    
+    stopCluster(cl)
     
     names(lst_pie1) <- c('abundance','richness')
     

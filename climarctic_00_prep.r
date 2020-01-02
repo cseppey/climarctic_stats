@@ -26,6 +26,7 @@ dir.create(dir_save, showWarnings=F, recursive=T)
 # env ----
 env_ini_fact <- read.table(paste0(dir_in, 'env_clim_grad.csv'), row.names=1)
 env_ini_chim <- read.table(paste0(dir_in, 'env_clim_chim.csv'), h=T)
+env_ini_gas  <- read.table(paste0(dir_in, 'Gas_fluxes_data.csv'), h=T)
 
 # reorganize env fact
 rn <- row.names(env_ini_fact)
@@ -40,8 +41,25 @@ env_ini_chim$depth <- gl(2, 18, labels=c('top','deep'))
 env_ini_chim <- env_ini_chim[c(matrix(1:36, nrow=2, byrow=T)),]
 env_ini_chim <- env_ini_chim[as.numeric(gl(36,3)),]
 
-# the the interesting variables
-env_tot <- cbind.data.frame(env_ini_fact[,c(2:5,7:11)], env_ini_chim[,c('pH','N','C','sand','silt','clay')])
+# add noise to texture
+tex <- env_ini_chim[,c('sand','silt','clay')]
+set.seed(0)
+tex <- as.data.frame(sapply(tex, function(x) x+rnorm(nrow(tex), sd=min(tex, na.rm=T)/1000)))
+names(tex) <- paste0(names(tex), '_nz')
+
+# reorganize the gas
+env_gas <- env_ini_gas[env_ini_gas$light_dark == 'light',]
+env_gas <- cbind(env_gas[env_gas$meteo == 'cloudy',c('Site','moisture','replicate','CH4','CO2','N2O')], 
+                 env_gas[env_gas$meteo == 'sunny',c('CH4','CO2','N2O')])
+colnames(env_gas) <- c(colnames(env_gas[1:3]), apply(expand.grid(c('CH4','CO2','N2O'), c('cloudy','sunny')), 
+                                                    1, function(x) paste(x, collapse='_')))
+env_gas <- env_gas[order(env_gas$Site,env_gas$moisture,env_gas$replicate),]
+env_gas <- env_gas[gl(18,6),]
+
+
+# take the interesting variables
+env_tot <- cbind.data.frame(env_ini_fact[,c(2:5,7:11)], env_ini_chim[,c('pH','N','C','sand','silt','clay','NO3','NH4','P_H2O','P_NAHCO3','P_labile')],
+                            tex, env_gas[,-c(1:3)])
 names(env_tot)[1:9] <- c('site','moisture','plot','depth','quadrat','empty','fresh','dry','burn')
 
 env_tot[,c('fresh','dry','burn')] <- sapply(env_tot[,c('fresh','dry','burn')], function(x) x-env_tot$empty)
@@ -78,7 +96,7 @@ permu <- 10000
 
 #---
 prim_names <- c('01_16S_V1-3','02_18S_V4','03_pmoA_mb661','04_pmoA_A682','05_ITS2','06_phoD','07_nifH', '08_cyaB','09_nirS')
-ind_prim <- c(1:2)
+ind_prim <- c(1:9)
 
 # loop the primers ####
 lst_comm <- NULL
@@ -97,7 +115,7 @@ for(i in ind_prim) {
     load(file)
   } else {
     mr_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.mr'), h=T)
-    ass_ini <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.DB.wang.taxonomy'), row.names=1)
+    ass_ini <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.ass'), row.names=1)
     fa_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.fa'))
     save(mr_ini, ass_ini, fa_ini, file=file) 
   }
@@ -105,11 +123,20 @@ for(i in ind_prim) {
   # reorganize mr
   mr_tot <- mr_ini[grep('T|B', row.names(mr_ini)),]
   
+  # remove the OTU found in the blanks
+  ind_blk <- grepl('B', row.names(mr_tot))
   rs <- rowSums(mr_tot)
   ord <- order(rs)
-  plot(rs[ord], col=as.numeric(grepl('B', row.names(mr_tot))[ord])+1, pch=19, main=prim_names[i])
+  plot(rs[ord], col=as.numeric(ind_blk[ord])+1, pch=19, main=prim_names[i])
   
-  mr_tot <- mr_tot[grep('T', row.names(mr_tot)),]
+  if(length(which(ind_blk))){
+    mr_blk <- ifelse(mr_tot[grep('B', row.names(mr_tot)),] == 0, 0, 1)
+    ind_conta <- colSums(mr_blk) != 0
+  } else {
+    ind_conta <- rep(F, nrow(mr_tot))
+  }
+  
+  mr_tot <- mr_tot[grep('T', row.names(mr_tot)),ind_conta == F]
   mr_tot <- mr_tot[,colSums(mr_tot) != 0]
   
   print(c(sum(mr_tot), ncol(mr_tot)))
@@ -135,12 +162,19 @@ for(i in ind_prim) {
   row.names(taxo_tot) <- row.names(ass_tot)
 
   taxo_tot <- as.data.frame(t(apply(taxo_tot, 1, function(x) {
-    x <- gsub('Incertae_Sedis', 'X', x)
-    x <- gsub('Unknown', 'unknown', x)
+    
+    x <- gsub('.*Incertae_.*|Unknown|.*-[pcofgs]$|.*_unclassified', 'u', x)
+    x <- gsub('_Incertae','', x)
 
     ind_unc <- grep('^[[:lower:]]', x)
-    for(i in ind_unc){
-      x[i] <- ifelse(grepl('_X', x[i-1]), paste0(x[i-1], 'X'), paste0(x[i-1], '_X'))
+    if(length(ind_unc)){
+      if(ind_unc[1] == 1){
+        x[1] <- 'Life'
+        ind_unc <- ind_unc[-1]
+      }
+    }
+    for(j in ind_unc){
+      x[j] <- ifelse(grepl('_X', x[j-1]), paste0(x[j-1], 'X'), paste0(x[j-1], '_X'))
     }
     return(x)
   })))
@@ -152,7 +186,33 @@ for(i in ind_prim) {
   mr_sort <- mr_tot[,ord_taxo]
   taxo_sort <- taxo_tot[ord_taxo,]
   
-  # mr_sort <- mr_tot
+  if(i != 1 & i != 2 & i != 5 & i != 8){
+    ind_true <- taxo_sort$V1 == 'TRUE'
+    
+    ass_sort <- droplevels(ass_sort[ind_true,])
+    mr_sort <- mr_sort[,ind_true]
+    taxo_sort <- droplevels(taxo_sort[ind_true,-1])
+  }
+  
+  # taxo_clean
+  taxo_false <- switch(i,
+                       '1' = 'Chloroplast',
+                       '2' = 'Metazoa|Embryophyceae',
+                       '3' = 'Life|TRUE_X',
+                       '4' = 'Life|TRUE_X',
+                       '5' = 'Plantae',
+                       '6' = 'Life|TRUE_X',
+                       '7' = 'Life|TRUE_X',
+                       '8' = 'Life|TRUE_X|Sericytochromatia|Vampirivibrionia|Bacteria_X|Chloroplast|Acidobacteriota|Actinobacteriota|Chloroflexi|Firmicutes|Methylomirabilota|Nitrospinota|Patescibacteria|Planctomycetota|Verrucomicrobiota|WS4',
+                       '9' = 'Life|TRUE_X')
+  ind_tf <- grepl(taxo_false, taxo_sort[,1]) | grepl(taxo_false, taxo_sort[,2]) | grepl(taxo_false, ass_sort$taxo)
+  
+  if(length(which(ind_tf))){
+    ass_sort <- droplevels(ass_sort[ind_tf == F,])
+    mr_sort <- mr_sort[,ind_tf == F]
+    taxo_sort <- droplevels(taxo_sort[ind_tf == F,])
+  }
+  
   env_sort <- env_tot[row.names(mr_sort),]
   
   # rrarefy ----
@@ -164,7 +224,7 @@ for(i in ind_prim) {
   plot(sort(rs), main=prim_names[i])
   abline(h=thresh)
   
-  # perc lost
+  # calculation of percentage of sequence and OTU lost
   perc_lost <- foreach(j=thresh, .combine=cbind, .verbose=T) %dopar% {
     if(nrow(mr_sort[rs >= j,]) > 1){
       set.seed(0)
@@ -251,6 +311,10 @@ save(lst_comm, env_tot, lst_palev, permu, file=file)
 
 file <- paste0(dir_save, '00_env_tot.Rdata')
 save(env_tot, file=file)
+
+stopCluster(cl)
+
+stop('pouet')
 
 # check length distro ####
 
