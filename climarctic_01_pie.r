@@ -24,8 +24,8 @@ load(file)
 
 # loop on raw and rraref
 lst_pie <- NULL
-for(h in c('raw','rrf2','rrf')){
-  
+for(h in c('cmb','raw','rrf2','rrf')){
+    
   print(h)
 
   # pie ####
@@ -86,7 +86,7 @@ for(h in c('raw','rrf2','rrf')){
                         deep  =which(env$depth    == 'deep'))
       
       if(j == 'abundance'){
-        nb_seq_otu <- parLapply(cl2, selec_smp1, function(x, mr=mr) if(length(x)){return(sum(mr[x,]))}, mr)
+        nb_seq_otu <- parLapply(cl2, selec_smp1, function(x, mr=mr) if(length(x)){return(round(sum(mr[x,])))}, mr)
       } else {
         nb_seq_otu <- parLapply(cl2, selec_smp1, function(x, mr=mr) if(length(x)){return(length(which(colSums(mr[x,]) != 0)))}, mr)
       }
@@ -109,7 +109,7 @@ for(h in c('raw','rrf2','rrf')){
         cond <- strsplit(k, '_')[[1]]
         ind <- which(env$moisture == cond[1] & env$site == cond[2] & env$depth == cond[3])
         ltot <- c(ltot, paste0(k, '\nsmp nb: ', length(ind),
-                               ifelse(j == 'abundance', ' seq nb: ', ' OTU nb: '), sum(rs[ind])))
+                               ifelse(j == 'abundance', ' seq nb: ', ' OTU nb: '), round(sum(rs[ind]))))
         if(length(ind)){
           selec_smp2[ind] <- ltot[length(ltot)]
         }
@@ -146,8 +146,8 @@ for(h in c('raw','rrf2','rrf')){
       # arg pie
       lst_arg_pie <- list(tot       =list(selec_smp=factor(rep(paste0('top\nsmp_nb: ', nrow(mr), ' seq nb: ', sum(mr)), nrow(mr))),
                                           mat_lay=matrix(c(0,1,2,0), nrow=1),
-                                          wdt_lay=c(0.1,1,2,0.1), hei_lay=c(1.5),
-                                          wdt=7, hei=6),
+                                          wdt_lay=c(0.1,1,2.5,0.1), hei_lay=c(1.5),
+                                          wdt=9, hei=6),
                           per_fact  =list(selec_smp=selec_smp1,
                                           mat_lay=matrix(c(0,1,2,8, 3:5,8, 0,6,7,8), nrow=3, byrow=T),
                                           wdt_lay=c(1,1,1,3), hei_lay=c(rep(1.1, 3)),

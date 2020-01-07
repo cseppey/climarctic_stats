@@ -8,6 +8,8 @@ gc()
 require(foreach)
 require(doSNOW) # e.g. makeSOCKcluster()
 require(RColorBrewer) # brewer.pal 
+require(zCompositions)
+require(abind)
 
 # prep cluster
 cl <- makeSOCKcluster(4)
@@ -24,18 +26,19 @@ dir.create(dir_prep, showWarnings=F, recursive=T)
 dir.create(dir_save, showWarnings=F, recursive=T)
 
 # env ----
-env_ini_fact <- read.table(paste0(dir_in, 'env_clim_grad.csv'), row.names=1)
+env_ini_fact <- read.table(paste0(dir_in, 'env_clim_grad.csv'), row.names=1, h=T)
 env_ini_chim <- read.table(paste0(dir_in, 'env_clim_chim.csv'), h=T)
-env_ini_gas  <- read.table(paste0(dir_in, 'Gas_fluxes_data.csv'), h=T)
+env_ini_gas_raw  <- read.table(paste0(dir_in, 'env_clim_gas_raw.csv'), h=T)
+env_ini_gas  <- read.table(paste0(dir_in, 'env_clim_gas.csv'), h=T)
 
-# reorganize env fact
+# env fact %%%
 rn <- row.names(env_ini_fact)
 row.names(env_ini_fact) <- ifelse(as.numeric(rn) < 100, ifelse(as.numeric(rn) < 10, paste0('T00', rn), paste0('T0', rn)), paste0('T', rn))
 
-# reorganize env_chim
+# env_chim %%%
 as_char <- as.character(env_ini_chim$sample)
 env_ini_chim$site  <- substr(as_char, 1, 1)
-env_ini_chim$moist <- rep(gl(3,3, labels=c('dry','medium','wet')), 4)
+env_ini_chim$moist <- rep(gl(3,3, labels=c('dry','intermediate','wet')), 4)
 env_ini_chim$depth <- gl(2, 18, labels=c('top','deep'))
 
 env_ini_chim <- env_ini_chim[c(matrix(1:36, nrow=2, byrow=T)),]
@@ -47,19 +50,143 @@ set.seed(0)
 tex <- as.data.frame(sapply(tex, function(x) x+rnorm(nrow(tex), sd=min(tex, na.rm=T)/1000)))
 names(tex) <- paste0(names(tex), '_nz')
 
-# reorganize the gas
-env_gas <- env_ini_gas[env_ini_gas$light_dark == 'light',]
-env_gas <- cbind(env_gas[env_gas$meteo == 'cloudy',c('Site','moisture','replicate','CH4','CO2','N2O')], 
-                 env_gas[env_gas$meteo == 'sunny',c('CH4','CO2','N2O')])
-colnames(env_gas) <- c(colnames(env_gas[1:3]), apply(expand.grid(c('CH4','CO2','N2O'), c('cloudy','sunny')), 
-                                                    1, function(x) paste(x, collapse='_')))
-env_gas <- env_gas[order(env_gas$Site,env_gas$moisture,env_gas$replicate),]
-env_gas <- env_gas[gl(18,6),]
+# env_gas %%%
+env_gas <- env_ini_gas_raw
+env_gas$Plot <- factor(env_gas$Plot)
+env_gas$Measurment <- factor(env_gas$Measurment)
 
+#---
+pdf(paste0(dir_prep, 'gas_measurements.pdf'), width=40, height=40)
+par(mfrow=c(12,12), mar=c(4,5,3,8))
+
+arr_gas <- NULL
+nm <- NULL
+
+for(e in levels(env_gas$Site)){
+  ae <- NULL
+  for(f in levels(env_gas$Habitat)){
+    af <- NULL
+    for(g in levels(env_gas$Plot)){
+      ag <- NULL
+      for(h in levels(env_gas$Condition)){
+        ah <- NULL
+        for(i in levels(env_gas$Measurment)){
+
+          non_clim <- e == 'Knudsenheia_mette' | e == 'Sulvaten'
+          
+          if(non_clim){
+            ind <- which(env_gas$Site == e 
+                         & env_gas$Plot == g)
+          } else {
+            ind <- which(env_gas$Site == e 
+                         & env_gas$Habitat == f 
+                         & env_gas$Plot == g 
+                         & env_gas$Condition == h 
+                         & env_gas$Measurment == i)
+          }
+          
+          df <- env_gas[ind,c('CH4','N2O','CO2')]
+          time <- env_gas$time[ind]
+          
+          lms <- as.data.frame(sapply(df, function(x) {
+            coef <- lm(x~time)$coefficients
+            R2_P <- unlist(cor.test(x,time)[c('estimate','p.value')])
+            
+            return(c(coef,R2_P))
+          }))
+          row.names(lms) <- c('intercept','slp','R2','P')
+          
+          #---
+          plot(df$CH4~time, xlab='minute', ylab='CH4', main=paste(c(e,f,g,h,i), collapse='_'), pch=15)
+          
+          abline(lms$CH4[1:2])
+          
+          for(j in 2:3){
+            par(new=T)
+            plot(df[[j]]~time, axes=F, bty='n', xlab='', ylab='', col=j, pch=c(16,17)[j-1])
+            
+            axis(side=4, line=(j-2)*4, at=pretty(range(df[[j]])))
+            mtext(names(df)[j], side=4, line=(j-2)*4+2, col=j, cex=0.6)
+            abline(lms[[j]][1:2], col=j)
+            
+          }
+          usr <- par('usr')
+          
+          ys <- usr[3]+diff(usr[3:4])*seq(0.15,0.1, length.out=3)
+          text(usr[1]+diff(usr[1:2])*0.1, ys, c('slp:','R2:','P:'), cex=0.5)
+          
+          for(j in 1:3){
+            text(usr[1]+diff(usr[1:2])*seq(0.2,0.5, length.out=3)[j], ys, signif(lms[2:4,j], 2), col=j, cex=0.5)
+          }
+          
+          #---
+          ah <- abind(ah, lms, along=3)
+        }
+        dimnames(ah)[[3]] <- paste0('mes_',levels(env_gas$Measurment))
+        ag <- abind(ag, ah, along=4)
+      }
+      dimnames(ag)[[4]] <- levels(env_gas$Condition)
+      af <- abind(af, ag, along=5)
+    }
+    dimnames(af)[[5]] <- paste0('plot_', levels(env_gas$Plot))
+    ae <- abind(ae, af, along=6)
+  }
+  dimnames(ae)[[6]] <- levels(env_gas$Habitat)
+  arr_gas <- abind(arr_gas, ae, along=7)
+}
+dimnames(arr_gas)[[7]] <- levels(env_gas$Site)
+
+dev.off()
+
+# retreive the gas data.frame
+
+slp <- arr_gas['slp',,,'light',,,c(1,3)]
+P   <- arr_gas['P'  ,,,'light',,,c(1,3)]
+
+for(h in c(0.3, 1)){
+  slp2 <- ifelse(P > h, NA, slp)
+  
+  flux <- as.data.frame.table(apply(slp2, c(1,3:5), function(x) mean(x, na.rm=T)))
+  flux <- as.data.frame(cbind(flux[seq(1,nrow(flux), by=3),2:4], matrix(flux$Freq, ncol=3, byrow=T)))
+  Ps   <- as.data.frame.table(apply(P, c(1,3:5), function(x) {
+    col <- 1
+    if((x[1] > 0.3 | x[2] > 0.3) & (x[1] < 0.3 | x[2] < 0.3)){
+      col <- 2
+    } else if (x[1] > 0.3 & x[2] > 0.3){
+      col <- 3
+    }
+    return(col)
+  }))
+  Ps   <- as.data.frame(cbind(Ps[seq(1,nrow(Ps), by=3),2:4], matrix(Ps$Freq, ncol=3, byrow=T)))
+  
+  # Aline version
+  env_gas1 <- env_ini_gas[env_ini_gas$light_dark == 'light',]
+  env_gas1 <- cbind(env_gas1[env_gas1$meteo == 'cloudy',c('Site','moisture','replicate','CH4','CO2','N2O')], 
+                   env_gas1[env_gas1$meteo == 'sunny',c('CH4','CO2','N2O')])
+  colnames(env_gas1) <- c(colnames(env_gas1[1:3]), apply(expand.grid(c('CH4','CO2','N2O'), c('cloudy','sunny')), 
+                                                      1, function(x) paste(x, collapse='_')))
+  env_gas1 <- env_gas1[order(env_gas1$Site, env_gas1$moisture, env_gas1$replicate),]
+  
+  # compa
+  pdf(paste0(dir_prep, 'gas_compa_aline_chris_', h, '.pdf'))
+  par(mfrow=c(2,2))
+  
+  for(i in 1:3){
+    df <- na.omit(data.frame(aline=apply(env_gas1[,c(3,6)+i], 1, mean), chris=flux[,3+i], col=Ps[,3+i]))
+    plot(df$aline, df$chris, col=df$col, main=c('CH4','N2O','CO2')[i])
+  }
+
+  dev.off()
+}
+
+#---
+flux <- flux[gl(18,6),]
+names(flux) <- c('plot','moisture','site','CH4_C','N2O_C','CO2_C')
+env_gas1 <- env_gas1[gl(18,6),]
 
 # take the interesting variables
-env_tot <- cbind.data.frame(env_ini_fact[,c(2:5,7:11)], env_ini_chim[,c('pH','N','C','sand','silt','clay','NO3','NH4','P_H2O','P_NAHCO3','P_labile')],
-                            tex, env_gas[,-c(1:3)])
+env_tot <- cbind.data.frame(env_ini_fact[,c(2:5,7:15)], env_ini_chim[,c('sand','silt','clay','NO3','NH4','P_H2O','P_NAHCO3','P_labile')],
+                            tex, env_gas1[,-c(1:3)], flux[,-c(1:3)])
 names(env_tot)[1:9] <- c('site','moisture','plot','depth','quadrat','empty','fresh','dry','burn')
 
 env_tot[,c('fresh','dry','burn')] <- sapply(env_tot[,c('fresh','dry','burn')], function(x) x-env_tot$empty)
@@ -184,6 +311,7 @@ for(i in ind_prim) {
 
   ass_sort <- ass_tot[ord_taxo,]
   mr_sort <- mr_tot[,ord_taxo]
+  mr_sort <- mr_sort[rowSums(mr_sort) != 0,]
   taxo_sort <- taxo_tot[ord_taxo,]
   
   if(i != 1 & i != 2 & i != 5 & i != 8){
@@ -215,7 +343,7 @@ for(i in ind_prim) {
   
   env_sort <- env_tot[row.names(mr_sort),]
   
-  # rrarefy ----
+  # communities normalisation ----
   rs <- rowSums(mr_sort)
   thresh <- seq(min(rs), max(rs), length.out=20)
   thresh <- thresh[-length(thresh)]
@@ -275,31 +403,43 @@ for(i in ind_prim) {
   
   dev.off()
   
-  #---
+  # combinatorial
+  mr_cmb <- mr_sort[,colSums(decostand(mr_sort, 'pa')) > 1]
+  mr_cmb <- mr_cmb[rowSums(mr_cmb) != 0,]
+  mr_cmb <- cmultRepl(mr_cmb)
+  
+  mr_cmb <- as.data.frame(t(apply(mr_cmb, 1, function(x) {
+    G <- exp(mean(log(x)))
+    return(sapply(x, function(y) y/G))
+  })))
+  
+  env_cmb <- env_tot[row.names(mr_cmb),]
+
+  ass_cmb <- ass_sort[names(mr_cmb),]
+  taxo_cmb <- taxo_sort[names(mr_cmb),]
+  
+  # rrf
   set.seed(0)
   mr_rrf <- rrarefy(mr_sort[rs >= op[3],], op[3])
   mr_rrf <- as.data.frame(mr_rrf[,colSums(mr_rrf) != 0])
   
   env_rrf <- env_tot[row.names(mr_rrf),]
   
-  fa_rrf <- fa_tot[names(fa_tot) %in% names(mr_rrf)]
-  
   ass_rrf <- ass_sort[names(mr_rrf),]
   taxo_rrf <- taxo_sort[names(mr_rrf),]
 
-  #---  
+  # rrf2 
   set.seed(0)
   mr_rrf2 <- rrarefy(mr_sort[rs >= op[1],], op[1])
   mr_rrf2 <- as.data.frame(mr_rrf2[,colSums(mr_rrf2) != 0])
   
   env_rrf2 <- env_tot[row.names(mr_rrf2),]
   
-  fa_rrf2 <- fa_tot[names(fa_tot) %in% names(mr_rrf2)]
-  
   ass_rrf2 <- ass_sort[names(mr_rrf2),]
   taxo_rrf2 <- taxo_sort[names(mr_rrf2),]
   
   lst_comm[[prim_names[i]]] <- list(raw= list(env=env_sort, mr=mr_sort, ass=ass_sort, taxo=taxo_sort),
+                                    cmb= list(env=env_cmb , mr=mr_cmb , ass=ass_cmb , taxo=taxo_cmb),
                                     rrf= list(env=env_rrf , mr=mr_rrf , ass=ass_rrf , taxo=taxo_rrf),
                                     rrf2=list(env=env_rrf2, mr=mr_rrf2, ass=ass_rrf2, taxo=taxo_rrf2))
 
