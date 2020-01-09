@@ -85,25 +85,25 @@ for(e in levels(env_gas$Site)){
                          & env_gas$Measurment == i)
           }
           
-          df <- env_gas[ind,c('CH4','N2O','CO2')]
-          time <- env_gas$time[ind]
+          df <- na.omit(data.frame(env_gas[ind,c('CH4','N2O','CO2')], time = env_gas$time[ind]))
           
-          lms <- as.data.frame(sapply(df, function(x) {
-            coef <- lm(x~time)$coefficients
-            R2_P <- unlist(cor.test(x,time)[c('estimate','p.value')])
+          lms <- as.data.frame(sapply(df[,1:3], function(x) {
+            lm <- lm(x~df$time)
+            coef <- lm$coefficients
+            R2_P <- c(R2=summary(lm)$r.squared, P=ifelse(length(x) == 3, cor.test(x,df$time)$p.value, NA))
             
             return(c(coef,R2_P))
           }))
           row.names(lms) <- c('intercept','slp','R2','P')
           
           #---
-          plot(df$CH4~time, xlab='minute', ylab='CH4', main=paste(c(e,f,g,h,i), collapse='_'), pch=15)
+          plot(df$CH4~df$time, xlab='minute', ylab='CH4', main=paste(c(e,f,g,h,i), collapse='_'), pch=15)
           
           abline(lms$CH4[1:2])
           
           for(j in 2:3){
             par(new=T)
-            plot(df[[j]]~time, axes=F, bty='n', xlab='', ylab='', col=j, pch=c(16,17)[j-1])
+            plot(df[[j]]~df$time, axes=F, bty='n', xlab='', ylab='', col=j, pch=c(16,17)[j-1])
             
             axis(side=4, line=(j-2)*4, at=pretty(range(df[[j]])))
             mtext(names(df)[j], side=4, line=(j-2)*4+2, col=j, cex=0.6)
@@ -138,55 +138,36 @@ dimnames(arr_gas)[[7]] <- levels(env_gas$Site)
 
 dev.off()
 
-# retreive the gas data.frame
-
-slp <- arr_gas['slp',,,'light',,,c(1,3)]
-P   <- arr_gas['P'  ,,,'light',,,c(1,3)]
-
-for(h in c(0.3, 1)){
-  slp2 <- ifelse(P > h, NA, slp)
-  
-  flux <- as.data.frame.table(apply(slp2, c(1,3:5), function(x) mean(x, na.rm=T)))
-  flux <- as.data.frame(cbind(flux[seq(1,nrow(flux), by=3),2:4], matrix(flux$Freq, ncol=3, byrow=T)))
-  Ps   <- as.data.frame.table(apply(P, c(1,3:5), function(x) {
-    col <- 1
-    if((x[1] > 0.3 | x[2] > 0.3) & (x[1] < 0.3 | x[2] < 0.3)){
-      col <- 2
-    } else if (x[1] > 0.3 & x[2] > 0.3){
-      col <- 3
-    }
-    return(col)
-  }))
-  Ps   <- as.data.frame(cbind(Ps[seq(1,nrow(Ps), by=3),2:4], matrix(Ps$Freq, ncol=3, byrow=T)))
-  
-  # Aline version
-  env_gas1 <- env_ini_gas[env_ini_gas$light_dark == 'light',]
-  env_gas1 <- cbind(env_gas1[env_gas1$meteo == 'cloudy',c('Site','moisture','replicate','CH4','CO2','N2O')], 
-                   env_gas1[env_gas1$meteo == 'sunny',c('CH4','CO2','N2O')])
-  colnames(env_gas1) <- c(colnames(env_gas1[1:3]), apply(expand.grid(c('CH4','CO2','N2O'), c('cloudy','sunny')), 
-                                                      1, function(x) paste(x, collapse='_')))
-  env_gas1 <- env_gas1[order(env_gas1$Site, env_gas1$moisture, env_gas1$replicate),]
-  
-  # compa
-  pdf(paste0(dir_prep, 'gas_compa_aline_chris_', h, '.pdf'))
-  par(mfrow=c(2,2))
-  
-  for(i in 1:3){
-    df <- na.omit(data.frame(aline=apply(env_gas1[,c(3,6)+i], 1, mean), chris=flux[,3+i], col=Ps[,3+i]))
-    plot(df$aline, df$chris, col=df$col, main=c('CH4','N2O','CO2')[i])
-  }
-
-  dev.off()
+# sort a bit the fluxes
+flux <- as.data.frame.table(arr_gas[c(2,4),,,'light',,,c(1,3)])
+flux <- cbind.data.frame(flux[seq(1, nrow(flux), 2),-c(1,ncol(flux))], 
+                         slp=flux$Freq[seq(1, nrow(flux), 2)], P=flux$Freq[seq(2, nrow(flux), 2)])
+fl <- flux[seq(1, nrow(flux), 3),sapply(flux, is.factor)][,-1]
+for(i in levels(flux$Var2)){
+  fl <- cbind.data.frame(fl, flux[flux$Var2 == i,c('slp','P')])
 }
+names(fl)[sapply(fl, function(x) is.factor(x) == F)] <- apply(expand.grid(c('slp','P'), levels(flux$Var2)), 
+                                                          1, function(x) paste(x[2:1], collapse='_'))
+
+fl_best <- NULL
+for(i in seq(1, nrow(fl), 2)){
+  var <- NULL
+  for(j in seq(6, ncol(fl), 2)){
+    ind <- c(i:(i+1))
+    Ps <- fl[ind,j]
+    var <- c(var, fl[ind[which(Ps == min(Ps, na.rm=T))], j-1])
+  }
+  fl_best <- rbind(fl_best, var)
+}
+fl_best <- cbind.data.frame(fl[seq(1,nrow(fl),2),2:4], fl_best)
+names(fl_best)[4:6] <- c('CH4','N2O','CO2')
 
 #---
-flux <- flux[gl(18,6),]
-names(flux) <- c('plot','moisture','site','CH4_C','N2O_C','CO2_C')
-env_gas1 <- env_gas1[gl(18,6),]
+flux <- fl_best[gl(18,6),4:6]
 
 # take the interesting variables
 env_tot <- cbind.data.frame(env_ini_fact[,c(2:5,7:15)], env_ini_chim[,c('sand','silt','clay','NO3','NH4','P_H2O','P_NAHCO3','P_labile')],
-                            tex, env_gas1[,-c(1:3)], flux[,-c(1:3)])
+                            tex, flux)
 names(env_tot)[1:9] <- c('site','moisture','plot','depth','quadrat','empty','fresh','dry','burn')
 
 env_tot[,c('fresh','dry','burn')] <- sapply(env_tot[,c('fresh','dry','burn')], function(x) x-env_tot$empty)
@@ -197,7 +178,7 @@ env_tot$C_N <- env_tot$C / env_tot$N
 env_tot <- env_tot[,-grep(paste(c('empty','fresh','dry','burn'), collapse='|'), names(env_tot))]
 
 env_tot$site <- gl(2, 54, labels=c('Knudsenheia','Ossian'))
-env_tot$moisture <- ordered(gl(3,18,108, c('dry','medium','wet')))
+env_tot$moisture <- ordered(gl(3,18,108, c('dry','intermediate','wet')))
 env_tot$plot <- as.factor(env_tot$plot)
 env_tot$depth <- rep(gl(2,3, labels=c('top','deep')), 18)
 env_tot$depth <- factor(env_tot$depth, levels=c('top','deep'))
