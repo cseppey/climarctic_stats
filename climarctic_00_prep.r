@@ -44,7 +44,7 @@ env_ini_chim$depth <- gl(2, 18, labels=c('top','deep'))
 env_ini_chim <- env_ini_chim[c(matrix(1:36, nrow=2, byrow=T)),]
 env_ini_chim <- env_ini_chim[as.numeric(gl(36,3)),]
 
-# add noise to texture
+# add noise to texture %%%
 tex <- env_ini_chim[,c('sand','silt','clay')]
 set.seed(0)
 tex <- as.data.frame(sapply(tex, function(x) x+rnorm(nrow(tex), sd=min(tex, na.rm=T)/1000)))
@@ -56,8 +56,8 @@ env_gas$Plot <- factor(env_gas$Plot)
 env_gas$Measurment <- factor(env_gas$Measurment)
 
 #---
-pdf(paste0(dir_prep, 'gas_measurements.pdf'), width=40, height=40)
-par(mfrow=c(12,12), mar=c(4,5,3,8))
+pdf(paste0(dir_prep, 'gas_measurements.pdf'), width=40, height=20)
+par(mfrow=c(6,12), mar=c(4,5,3,8))
 
 arr_gas <- NULL
 nm <- NULL
@@ -97,26 +97,28 @@ for(e in levels(env_gas$Site)){
           row.names(lms) <- c('intercept','slp','R2','P')
           
           #---
-          plot(df$CH4~df$time, xlab='minute', ylab='CH4', main=paste(c(e,f,g,h,i), collapse='_'), pch=15)
-          
-          abline(lms$CH4[1:2])
-          
-          for(j in 2:3){
-            par(new=T)
-            plot(df[[j]]~df$time, axes=F, bty='n', xlab='', ylab='', col=j, pch=c(16,17)[j-1])
+          if(non_clim == F){
+            plot(df$CH4~df$time, xlab='minute', ylab='CH4', main=paste(c(e,f,g,h,i), collapse='_'), pch=15)
             
-            axis(side=4, line=(j-2)*4, at=pretty(range(df[[j]])))
-            mtext(names(df)[j], side=4, line=(j-2)*4+2, col=j, cex=0.6)
-            abline(lms[[j]][1:2], col=j)
+            abline(lms$CH4[1:2])
             
-          }
-          usr <- par('usr')
-          
-          ys <- usr[3]+diff(usr[3:4])*seq(0.15,0.1, length.out=3)
-          text(usr[1]+diff(usr[1:2])*0.1, ys, c('slp:','R2:','P:'), cex=0.5)
-          
-          for(j in 1:3){
-            text(usr[1]+diff(usr[1:2])*seq(0.2,0.5, length.out=3)[j], ys, signif(lms[2:4,j], 2), col=j, cex=0.5)
+            for(j in 2:3){
+              par(new=T)
+              plot(df[[j]]~df$time, axes=F, bty='n', xlab='', ylab='', col=j, pch=c(16,17)[j-1])
+              
+              axis(side=4, line=(j-2)*4, at=pretty(range(df[[j]])))
+              mtext(names(df)[j], side=4, line=(j-2)*4+2, col=j, cex=0.6)
+              abline(lms[[j]][1:2], col=j)
+              
+            }
+            usr <- par('usr')
+            
+            ys <- usr[3]+diff(usr[3:4])*seq(0.15,0.1, length.out=3)
+            text(usr[1]+diff(usr[1:2])*0.1, ys, c('slp:','R2:','P:'), cex=0.5)
+            
+            for(j in 1:3){
+              text(usr[1]+diff(usr[1:2])*seq(0.2,0.5, length.out=3)[j], ys, signif(lms[2:4,j], 2), col=j, cex=0.5)
+            }
           }
           
           #---
@@ -203,7 +205,7 @@ lst_palev <- list(site    =list(pal=pal_dark2[1:2], lev=lev_site),
 permu <- 10000
 
 #---
-prim_names <- c('01_16S_V1-3','02_18S_V4','03_pmoA_mb661','04_pmoA_A682','05_ITS2','06_phoD','07_nifH', '08_cyaB','09_nirS')
+prim_names <- c('01_16S_bact','02_18S_euk','03_pmoA_mb661','04_pmoA_A682','05_ITS_fun','06_phoD','07_nifH', '08_16S_cyano','09_nirS')
 ind_prim <- c(1:9)
 
 # loop the primers ####
@@ -295,6 +297,7 @@ for(i in ind_prim) {
   mr_sort <- mr_sort[rowSums(mr_sort) != 0,]
   taxo_sort <- taxo_tot[ord_taxo,]
   
+  # femove false positive
   if(i != 1 & i != 2 & i != 5 & i != 8){
     ind_true <- taxo_sort$V1 == 'TRUE'
     
@@ -319,6 +322,7 @@ for(i in ind_prim) {
   if(length(which(ind_tf))){
     ass_sort <- droplevels(ass_sort[ind_tf == F,])
     mr_sort <- mr_sort[,ind_tf == F]
+    mr_sort <- mr_sort[rowSums(mr_sort) != 0,]
     taxo_sort <- droplevels(taxo_sort[ind_tf == F,])
   }
   
@@ -326,12 +330,10 @@ for(i in ind_prim) {
   
   # communities normalisation ----
   rs <- rowSums(mr_sort)
-  thresh <- seq(min(rs), max(rs), length.out=20)
+  rg <- range(rs)
+  b <- 2
+  thresh <- unique(round((b^(1:20)-b)/b^20*diff(rg)+rg[1]))
   thresh <- thresh[-length(thresh)]
-  
-  # nb seq
-  plot(sort(rs), main=prim_names[i])
-  abline(h=thresh)
   
   # calculation of percentage of sequence and OTU lost
   perc_lost <- foreach(j=thresh, .combine=cbind, .verbose=T) %dopar% {
@@ -368,36 +370,40 @@ for(i in ind_prim) {
   }
   
   #---
-  # pdf(paste0(dir_prep, 'rraref_optimum_', prim_names[i], '.pdf'))
-  cairo_ps(paste0(dir_prep, 'rraref_optimum_', prim_names[i], '.eps'))
+  pdf(paste0(dir_prep, 'rraref_optimum_log_', prim_names[i], '.pdf'))
+  # cairo_ps(paste0(dir_prep, 'rraref_optimum_', prim_names[i], '.eps'))
   
-  plot(NA, xlim=range(thresh), ylim=c(0,1), xlab='thresh', ylab='percentage',
-       main=paste('seq ini:', sum(mr_sort), 'otu ini:', ncol(mr_sort), 'smp ini:', nrow(mr_sort)))
+  plot(NA, xlim=range(rs), ylim=c(0,1), xlab='thresh', ylab='percentage',
+       main=paste('seq ini:', sum(mr_sort), 'otu ini:', ncol(mr_sort), 'smp ini:', nrow(mr_sort)), log='x')
+  usr <- par('usr')
   
   for(j in 1:nrow(perc_lost)){
     lines(thresh[1:ncol(perc_lost)], perc_lost[j,], col=j)
   }
   
-  abline(v=op, lty=3)
+  abline(v=op, lty=3, col=4, lwd=2)
+  abline(v=thresh, col='grey80')
 
   legend('topright', legend=c('sequence','OTU','sample'), text.col=1:3, bty='n')
   
+  points(sort(rs), seq(1, 0, length.out=length(rs)), pch=19, cex=0.2)
+  
   dev.off()
   
-  # combinatorial
-  mr_cmb <- mr_sort[,colSums(decostand(mr_sort, 'pa')) > 1]
-  mr_cmb <- mr_cmb[rowSums(mr_cmb) != 0,]
-  mr_cmb <- cmultRepl(mr_cmb)
+  # compositional
+  mr_clr <- mr_sort[,colSums(decostand(mr_sort, 'pa')) > 1]
+  mr_clr <- mr_clr[rowSums(mr_clr) != 0,]
+  mr_clr <- cmultRepl(mr_clr)
   
-  mr_cmb <- as.data.frame(t(apply(mr_cmb, 1, function(x) {
+  mr_clr <- as.data.frame(t(apply(mr_clr, 1, function(x) {
     G <- exp(mean(log(x)))
     return(sapply(x, function(y) y/G))
   })))
   
-  env_cmb <- env_tot[row.names(mr_cmb),]
+  env_clr <- env_tot[row.names(mr_clr),]
 
-  ass_cmb <- ass_sort[names(mr_cmb),]
-  taxo_cmb <- taxo_sort[names(mr_cmb),]
+  ass_clr <- ass_sort[names(mr_clr),]
+  taxo_clr <- taxo_sort[names(mr_clr),]
   
   # rrf
   set.seed(0)
@@ -420,11 +426,13 @@ for(i in ind_prim) {
   taxo_rrf2 <- taxo_sort[names(mr_rrf2),]
   
   lst_comm[[prim_names[i]]] <- list(raw= list(env=env_sort, mr=mr_sort, ass=ass_sort, taxo=taxo_sort),
-                                    cmb= list(env=env_cmb , mr=mr_cmb , ass=ass_cmb , taxo=taxo_cmb),
+                                    clr= list(env=env_clr , mr=mr_clr , ass=ass_clr , taxo=taxo_clr),
                                     rrf= list(env=env_rrf , mr=mr_rrf , ass=ass_rrf , taxo=taxo_rrf),
                                     rrf2=list(env=env_rrf2, mr=mr_rrf2, ass=ass_rrf2, taxo=taxo_rrf2))
 
 }
+
+lst_comm <- lst_comm[c(1,8,2,5,3,4,6,7,9)]
 
 #---
 file <- paste0(dir_save, '00_lst_comm.Rdata')
@@ -435,28 +443,26 @@ save(env_tot, file=file)
 
 stopCluster(cl)
 
-stop('pouet')
-
 # check length distro ####
 
-lst_lim <- list(`16S_V1-3`=c(450,570),
-                `18S_V4`=c(380,480),
+lst_lim <- list(`16S_bact`=c(450,570),
+                `18S_euk`=c(380,480),
                 pmoA_mb661=c(490,530),
                 pmoA_A682=c(510,550),
-                ITS=c(270,500),
+                ITS_fun=c(270,500),
                 phoD=c(330,450),
                 nifH=c(310,450),
-                cyaB=c(390,470),
+                `16S_cyano`=c(390,470),
                 nirS=c(380,460))
 
 pdf(paste0(dir_prep, 'lgt_distro.pdf'), width=15, height=15)
 par(mfrow=c(3,3))
 
-for(i in ind_prim){
-  lst_file <- list.files(paste0('Projets/Climarctic/bioinfo/archive/191019_all_clustering/0', i, '/filter_test/distro_test'), full.names=T)
+for(i in c(1,8,2,5,3,4,6,7,9)){
+  files <- list.files(paste0('Projets/Climarctic/bioinfo/archive/191031/0', i, '/filter_test/distro_test'), full.names=T)
 
   lgt_dis <- NULL
-  for(j in lst_file){
+  for(j in files){
     lgt_dis <- c(lgt_dis, unlist(read.table(j)))
   }
 
@@ -472,8 +478,8 @@ pdf(paste0(dir_prep, 'bioinfo_check.pdf'), width=15, height=20)
 par(mfrow=c(5,4))
 
 ra_tot <- NULL
-for(i in seq_along(prim_names[ind_prim])){
-  out_bf <- read.table(paste0('Projets/Climarctic/bioinfo/archive/next/filter_test/cnt_output/cnt_output', i),
+for(i in c(1,8,2,5,3,4,6,7,9)){
+  out_bf <- read.table(paste0('Projets/Climarctic/bioinfo/archive/191229/filter_test/cnt_output/cnt_output', i),
                        h=T, sep='\t', row.names=1)
 
   out_bf <- out_bf[order(row.names(out_bf)),]
@@ -496,10 +502,6 @@ for(i in seq_along(prim_names[ind_prim])){
 
   ra_tot <- cbind(ra_tot, cbind(cs, decostand(cs, 'max')))
 
-  #---
-  pdf(paste0(dir_prep, 'bioinfo_check_', i, '.pdf'), width=8, height=4)
-  par(mfrow=c(1,2))
-  
   for(jn in names(lst)){
     j <- lst[[jn]]
 
@@ -520,13 +522,9 @@ for(i in seq_along(prim_names[ind_prim])){
     }
   }
   
-  dev.off()
 }
 
 # total
-
-pdf(paste0(dir_prep, 'bioinfo_check_tot.pdf'), width=8, height=4)
-par(mfrow=c(1,2))
 
 pal_prim <- brewer.pal(9, 'Set1')
 
