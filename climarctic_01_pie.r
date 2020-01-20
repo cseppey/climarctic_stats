@@ -24,7 +24,7 @@ load(file)
 
 # loop on raw and rraref
 lst_pie <- NULL
-for(h in c('cmb','raw','rrf2','rrf')){
+for(h in c('clr','raw','rrf2','rrf')){
     
   print(h)
 
@@ -34,14 +34,14 @@ for(h in c('cmb','raw','rrf2','rrf')){
     print(i)
     
     tax_lev <- switch(i,
-                      "01_16S_V1-3"   = 1:5,
-                      "02_18S_V4"     = 1:5,
+                      "01_16S_bact"   = 1:5,
+                      "02_18S_euk"    = 1:5,
                       "03_pmoA_mb661" = 4:7,
                       "04_pmoA_A682"  = 4:7,
-                      "05_ITS2"       = 1:5,
+                      "05_ITS_fun"    = 1:5,
                       "06_phoD"       = 1:4,
                       "07_nifH"       = 1:4,
-                      "08_cyaB"       = 4:6,
+                      "08_16S_cyano"  = 4:6,
                       "09_nirS"       = 1:4)
     
     #---
@@ -200,8 +200,6 @@ for(h in c('cmb','raw','rrf2','rrf')){
 }
 
 #---
-file <- paste0(dir_save, '01_lst_comm.Rdata')
-save(lst_comm, file=file)
 file <- paste0(dir_save, '01_lst_pie.Rdata')
 save(lst_pie, file=file)
 

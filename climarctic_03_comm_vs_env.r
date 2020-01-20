@@ -23,8 +23,7 @@ dir.create(dir_cve, showWarnings=F)
 #---
 file <- paste0(dir_save, '00_lst_comm.Rdata')
 load(file)
-# file <- paste0(dir_save, '01_lst_comm.Rdata')
-# load(file)
+
 file <- paste0(dir_save, '03_lst_comm.Rdata')
 if(file.exists(file)){
   load(file)
@@ -37,50 +36,31 @@ permu <- 1000
 
 fact_3 <- c('site','moisture','depth')
 
-# file for the model summaries
-file <- paste0(dir_cve, 'test_models.csv')
-if(file.exists(file)){
-  file.remove(file)
-}
-
-# file for centroids summaries
-file <- paste0(dir_cve, 'centro.csv')
-if(file.exists(file)){
-  file.remove(file)
-}
-
 # loop on communities
 for(i in names(lst_comm)){
-  for(j in c('raw','rrf','rrf2')){
+  stat2 <- NULL
+  for(j in names(lst_comm[[i]])){
 
     if(is.null(lst_comm[[i]][[j]])){
       next
     }
     
     env <- lst_comm[[i]][[j]]$env
-    e <- na.omit(env[,c('site','moisture','depth','plot_in_moist_in_site','pH','C_N','sand','silt','clay','rh','om')])
-    ee <- e
-    
-    is.fact <- sapply(ee, is.factor)
-    
+    env <- env[,c('site','moisture','depth','plot_in_moist_in_site',
+                  'pH','C_N','S','NO3','NH4','P_labile',
+                  'sand_nz','silt_nz','clay_nz','rh','om',
+                  "CH4","CO2","N2O")]
     
     # transfo ####
     print(paste(i, j, 'transfo'))
     
-    mr <- lst_comm[[i]][[j]]$mr[row.names(e),]
+    mr <- lst_comm[[i]][[j]]$mr
     mr <- mr[rowSums(mr) != 0,colSums(mr) != 0]
-    e <- e[row.names(mr),]
-    ee <- e
-    
-    fact_plot <- apply(sapply(ee[,4:3], as.character), 1, function(x) paste(x, collapse='_'))
-    fact_plot <- factor(fact_plot, levels=unique(fact_plot))
-    lfp <- levels(fact_plot)
-    
-    ee <- ee[,-4]
+    env <- env[row.names(mr),]
     
     transfo <- c('raw','hell','log')
     
-    if('lst_trsf_bc' %in% names(lst_comm) == F){
+    if('lst_trsf_bc' %in% names(lst_comm[[i]][[j]]) == F){
       lst_trsf <- foreach(k=transfo) %dopar% {
         if(k == 'raw'){
           return(list(mr=mr, bc=vegdist(mr)))
@@ -90,213 +70,160 @@ for(i in names(lst_comm)){
         }
       }
       names(lst_trsf) <- transfo
+      lst_trsf <- append(lst_trsf, list(env))
+      names(lst_trsf)[4] <- 'env'
       
       lst_comm[[i]][[j]][['lst_trsf_bc']] <- lst_trsf
     }
     
-    
     # model ####
     print(paste(i, j, 'model'))
     
+    env <- lst_comm[[i]][[j]]$lst_trsf_bc$env
+    
     res_tst <- foreach(k=transfo, .verbose=T) %dopar% {
-      bc <- lst_trsf[[k]]$bc
       
-      lst_mod <- NULL
+      bc <- lst_comm[[i]][[j]]$lst_trsf_bc[[k]]$bc
       
-      var_coor_pv <- array(NA, dim=c(length(ee)+1, 3, 2),
-                           dimnames=list(c(names(ee), 'stress_aic'), c('x','y','pv'), c('NMDS','RDA')))
-      dn <- dimnames(var_coor_pv)
-      #
+      e <- na.omit(env)
+      is.fact <- sapply(e, is.factor)
+      b <- as.dist(as.matrix(bc)[row.names(e),row.names(e)])
       
-      # NMDS ----
-      nmds <- metaMDS(bc)
+      if(nrow(e) >= ncol(e)-1){
       
-      # test + coord
-      ef <- envfit(nmds, ee, na.rm=T, permutations=permu)
-      
-      for(l in dn[[1]]){
-        if(l != ('stress_aic')){
-          if(is.fact[names(is.fact) == l]) {
-            var_coor_pv[l,3,1] <- ef$factors$pvals[l]
-          } else {
-            var_coor_pv[l,,1] <- c(ef$vectors$arrows[l,], ef$vectors$pvals[l])
-          }
-        } else {
-          var_coor_pv[l,3,1] <- nmds$stress
-        }
-      }
-      
-      # coord
-      site <- nmds$points
-      
-      # centroids per plot
-      smp_cls <- NULL
-      
-      for(l in lfp){
+        # rda
+        formu <- formula(paste0('b~depth+', paste(names(e)[is.fact == F], collapse='+'), '+Condition(site)', collapse=''))
+        rda <- capscale(formu, data=e, scale=T)
         
-        ind_plt <- which(fact_plot == l)
-        
-        lp <- length(ind_plt)
-        rn <- row.names(site)[ind_plt]
-        
-        if(lp == 1){
-          smp_cls <- c(smp_cls, rn)
-        
-        } else if (lp == 2){
-          smp_cls <- c(smp_cls, paste(rn, collapse='|'))
-          
-        } else {
-          site_plt <- site[rn,]
-          cs <- colSums(apply(site_plt, 1, function(x) abs(x-apply(site_plt, 2, mean))))
-          smp_cls <- c(smp_cls, names(which(cs == min(cs))))
-        }
-      }
-      names(smp_cls) <- lfp
-      
-      axis_n <- c('NMDS 1','NMDS 2')
-      
-      lst_mod[['NMDS']] <- list(site=site, axis_n=axis_n, smp_cls=smp_cls)
-      
-      
-      # RDA ----
-      rda <- capscale(bc~., data=ee) 
-      
-      s <- summary(rda)
-      
-      variance <- signif(s$cont$importance[2,1:2], 2)
-      
-      # test
-      pvs <- NULL
-      for(l in names(ee)){
+        # retreive a more parcimonious model
+        ### note: the parcimonious model did not depend of the order of the variable in the input model
         set.seed(0)
-        pvs <- c(pvs, signif(anova(rda, update(rda, as.formula(paste('.~.-', l))), parallel=4, permutations=permu)$`Pr(>F)`[2], 2))
-      }
-      pvs[is.na(pvs)] <- 1
-      names(pvs) <- names(ee)
-      
-      # coord
-      
-      for(l in dn[[1]]){
-        if(l != ('stress_aic')){
-          if(is.fact[names(is.fact) == l]) {
-            var_coor_pv[l,3,2] <- pvs[l]
-          } else {
-            if(l %in% row.names(s$biplot)){
-              var_coor_pv[l,,2] <- c(s$biplot[l,1:2], pvs[l])
-            }
-          }
-        } else {
-          var_coor_pv[l,3,2] <- extractAIC(rda)[2]
-        }
-      }
-      
-      # coord
-      site <- s$sites[,1:2]
-
-      # centroids per plot
-      smp_cls <- NULL
-      
-      for(l in lfp){
+        rda_parci <- ordistep(capscale(b~depth+rh+Condition(site), data=e, scale=T), formula(rda), trace=F)
+        v <- attributes(rda_parci$terminfo$terms)$term.labels
         
-        ind_plt <- which(fact_plot == l)
+        e <- na.omit(env[,v])
+        b <- as.dist(as.matrix(bc)[row.names(e),row.names(e)])
+        rda_parci <- capscale(formula(paste(c('b~depth+rh', names(e)[grepl('depth|rh|site', names(e)) == F],
+                                              'Condition(site)'), collapse='+')), data=e)
         
-        lp <- length(ind_plt)
-        rn <- row.names(site)[ind_plt]
-        
-        if(lp == 1){
-          smp_cls <- c(smp_cls, rn)
-          
-        } else if (lp == 2){
-          smp_cls <- c(smp_cls, paste(rn, collapse='|'))
-          
-        } else {
-          site_plt <- s$site[rn,]
-          cs <- colSums(apply(site_plt, 1, function(x) abs(x-apply(site_plt, 2, mean))))
-          smp_cls <- c(smp_cls, names(which(cs == min(cs))))
-        }
-      }
-      names(smp_cls) <- lfp
-      
-      axis_n <- paste('RDA', 1:2, variance) 
-      
-      lst_mod[['RDA']] <- list(site=site, axis_n=axis_n, smp_cls=smp_cls)
-      
-      
-      # graf ----
-      for(ln in names(lst_mod)){
-        l <- lst_mod[[ln]]
-        v <- as.data.frame(var_coor_pv[,,ln])
-        
-        coord <- rbind(l$site, as.matrix(v[,1:2]))
-        
-        #---
-        cairo_ps(paste0(dir_cve, ln, '_', i, '_', j, '_', k, '.eps'), width=10, height=7)
+        # graf
+        pdf(paste0(dir_cve, 'RDA_', i, '_', j, '_', k, '.pdf'), width=10, height=7)
         layout(matrix(c(1,3,4, 1,5,6, 0,2,2), nrow=3, byrow=T), width=c(0.2,1,1), height=c(1,1,0.3))
-        par(mar=rep(0,4))
         
-        # axis
-        for(m in 2:1){
+        stat <- NULL
+        for(l in list(rda, rda_parci)){
+          
+          par(mar=rep(0,4), oma=rep(1,4))
+          
+          # coord prep
+          s <- summary(l)
+          
+          site <- s$sites[,1:2]
+          
+          v <- unlist(strsplit(gsub(' ', '', as.character(s$call$formula[[3]][2])), '+', fixed=T))
+          var <- s$biplot
+          var <- var[row.names(var) %in% v,1:2]
+          
+          e <- env[row.names(site),]
+          b <- as.dist(as.matrix(bc)[row.names(e),row.names(e)])
+          
+          coord <- rbind(site, var)
+          
+          # axis
+          vari <- s$cont$importance[2,1:2]
+          vari <- paste0(names(vari), ' ', signif(vari*100,2), '%')
+          for(m in 2:1){
+            plot.new()
+            text(0.5,0.5, labels=vari[m], srt=ifelse(m == 1, 0, 90))
+          }
+          
+          # ordinations
+          for(m in seq_along(fact_3)){
+            
+            mn <- fact_3[m]
+            
+            plot(site, xlim=range(coord[,1], na.rm=T), ylim=range(coord[,2], na.rm=T), xaxt='n', yaxt='n',
+                 col=lst_palev[[mn]]$pal[e[[mn]]], pch=NA)
+            if(m != 1){
+              axis(1)
+            }
+            if(m != 2){
+              axis(2)
+            }
+            
+            ordispider(site, factor(paste(e$depth, e$plot_in_moist_in_site)), col='grey80')
+            
+            text(site, labels=row.names(site), col=lst_palev[[mn]]$pal[e[[mn]]])
+            
+            abline(v=0,h=0,lty=3)
+            
+            arrows(0,0,var[,1],var[,2], length=0, lty=2, col='grey70')
+            text(var[,1:2], labels=paste(row.names(var)))
+            
+          }
+          
+          # legend ---
           plot.new()
-          text(0.5,0.5,labels=l$axis_n[m], srt=ifelse(m == 1, 0, 90))
+          
+          # factors colors
+          legend(0.5,0.5, legend=c(unlist(sapply(lst_palev, '[[', 2))), bty='n', xjust=0.5, yjust=0.5,
+                 pch=19, col=unlist(sapply(lst_palev, '[[', 1)))
+          
+          # test each variable
+          vtt <- rev(rev(attributes(l$terms)$term.labels)[-1])
+          pvs <- matrix(NA, nrow=ncol(env)-3, ncol=4, dimnames=list(names(env)[-c(1,2,4)], c('pv_strict','va_strict', 'pv_all','va_all')))
+          for(m in vtt){
+            set.seed(0)
+            
+            upd <- update(l, as.formula(paste('.~.-', m)))
+            pv1 <- signif(anova(l, upd, parallel=4, permutations=permu)$`Pr(>F)`[2], 2)
+            va1 <- RsquareAdj(l)[[1]] - RsquareAdj(upd)[[1]]
+            
+            rda1 <- capscale(as.formula(paste('b~', m)), data=e, scale=T)
+            pv2 <- signif(anova(rda1)$`Pr(>F)`[1], 2)
+            va2 <- RsquareAdj(rda1)[[1]] 
+            
+            pvs[m,] <- c(pv1, va1, pv2, va2)
+          }
+          
+          ### note: the AIC did not depend on the order of the variables in the model
+          ### note: the RsqrtAdj is not available because of the Condition(site)
+          stat <- cbind(stat, rbind(pvs, info=c(extractAIC(l)[2], RsquareAdj(l)[1], nrow(site),
+                                                length(unlist(strsplit(as.character(l$call$formula[[3]][2]), '+', fixed=T))))))
+          
         }
         
-        # ordinations
-        for(m in fact_3){
-          plot(NA, xlim=range(coord[,1], na.rm=T), ylim=range(coord[,2], na.rm=T))
-          
-          abline(v=0,h=0,lty=3)
-          
-          arrows(0,0,v[,1],v[,2], length=0, lty=2, col='grey70')
-          text(v[,1:2], labels=paste(row.names(v), signif(v$pv, 3)))
-          
-          ordispider(l$site, fact_plot, col='grey')
-          
-          text(l$site, labels=row.names(l$site), col=lst_palev[[m]]$pal[e[[m]]])     
-          
-        }
-        
-        # legend ---
-        plot.new()
-        
-        # factors colors
-        legend(0.33,0.5, legend=c(unlist(sapply(lst_palev, '[[', 2))), bty='n', xjust=0.5, yjust=0.5,
-               pch=19, col=unlist(sapply(lst_palev, '[[', 1)))
-        
-        # factors significance
-        is_fact_sa <- c(is.fact, TRUE)
-        df_fct <- v[is_fact_sa,]
-        
-        legend(0.66,0.5, legend=paste(row.names(df_fct), signif(df_fct$pv,3)), bty='n', xjust=0.5, yjust=0.5)
-        
-        #---
         dev.off()
+        
+        st <- apply(stat, 2, as.numeric)
+        row.names(st) <- c(row.names(pvs), 'AIC')
+        
+        return(st)      
+      } else {
+        return(dim(e))
       }
-      
-      #---
-      return(list(var=var_coor_pv[,3,], smp_cls=sapply(lst_mod, '[[', 3)))
     }
     
     names(res_tst) <- transfo
-    
-    # output model
-    df <- cbind(res_tst$raw$var, res_tst$hell$var, res_tst$log$var) 
-    colnames(df) <- apply(expand.grid(colnames(res_tst[[1]][[1]]), names(res_tst)), 1, function(x) paste(x, collapse='_'))  
-    
-    file <- paste0(dir_cve, 'test_models.csv')
-    
-    write.table(paste(i, j), file=file, append=T, row.names=F, col.names=F, quote=F)
-    write.table(df, file=file, append=T, quote=F)      
-    
-    # output centroids
-    df <- cbind(res_tst$raw$smp_cls, res_tst$hell$smp_cls, res_tst$log$smp_cls) 
-    colnames(df) <- apply(expand.grid(colnames(res_tst[[1]][[1]]), names(res_tst)), 1, function(x) paste(x, collapse='_'))  
-    
-    file <- paste0(dir_cve, 'centro.csv')
-    
-    write.table(paste(i, j), file=file, append=T, row.names=F, col.names=F, quote=F)
-    write.table(df, file=file, append=T, quote=F)      
+    stat2[[j]] <- res_tst
+
+  }
+  
+  # out stat
+  file <- paste0(dir_cve, 'stat_', i, '.csv')
+  if(file.exists(file)){
+    file.remove(file)
+  }
+  
+  for(k in names(stat2)){
+    write.table(k, file, T)
+    for(l in names(stat2[[k]])){
+      write.table(l, file, T)      
+      write.table(stat2[[k]][[l]], file, T)
+    }
     
   }
+  
 }
 
 file <- paste0(dir_save, '03_lst_comm.Rdata')
