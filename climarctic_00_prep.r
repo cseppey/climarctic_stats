@@ -44,12 +44,6 @@ env_ini_chim$depth <- gl(2, 18, labels=c('top','deep'))
 env_ini_chim <- env_ini_chim[c(matrix(1:36, nrow=2, byrow=T)),]
 env_ini_chim <- env_ini_chim[as.numeric(gl(36,3)),]
 
-# add noise to texture %%%
-tex <- env_ini_chim[,c('sand','silt','clay')]
-set.seed(0)
-tex <- as.data.frame(sapply(tex, function(x) x+rnorm(nrow(tex), sd=min(tex, na.rm=T)/1000)))
-names(tex) <- paste0(names(tex), '_nz')
-
 # env_gas %%%
 env_gas <- env_ini_gas_raw
 env_gas$Plot <- factor(env_gas$Plot)
@@ -168,8 +162,8 @@ names(fl_best)[4:6] <- c('CH4','N2O','CO2')
 flux <- fl_best[gl(18,6),4:6]
 
 # take the interesting variables
-env_tot <- cbind.data.frame(env_ini_fact[,c(2:5,7:15)], env_ini_chim[,c('sand','silt','clay','NO3','NH4','P_H2O','P_NAHCO3','P_labile')],
-                            tex, flux)
+env_tot <- cbind.data.frame(env_ini_fact[,c(2:5,7:15)], 
+                            env_ini_chim[,c('silt','clay','NO3','NH4','P_H2O','P_NAHCO3','P_labile')], flux)
 names(env_tot)[1:9] <- c('site','moisture','plot','depth','quadrat','empty','fresh','dry','burn')
 
 env_tot[,c('fresh','dry','burn')] <- sapply(env_tot[,c('fresh','dry','burn')], function(x) x-env_tot$empty)

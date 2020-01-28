@@ -24,8 +24,8 @@ load(file)
 
 # loop on raw and rraref
 lst_pie <- NULL
-for(h in c('clr','raw','rrf2','rrf')){
-    
+# for(h in c('clr','raw','rrf2','rrf')){
+for(h in 'rrf2'){
   print(h)
 
   # pie ####
@@ -171,8 +171,8 @@ for(h in c('clr','raw','rrf2','rrf')){
 
         source('bin/src/my_prog/R/pie_taxo.r')
         
-        # pdf(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.pdf'), width=kl$wdt, height=kl$hei)
-        cairo_ps(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.eps'), width=kl$wdt, height=kl$hei)
+        pdf(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.pdf'), width=kl$wdt, height=kl$hei)
+        # cairo_ps(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.eps'), width=kl$wdt, height=kl$hei)
         
         pie <- pie_taxo(decostand(mr, 'total'), taxo, tax_lev, kl$selec_smp, mat_lay=kl$mat_lay, cex=1.2, box=F, thresh=0.02,
                         wdt_lay=kl$wdt_lay, hei_lay=kl$hei_lay, info_perc=F, rshift=0.0, last_tax_text=F)

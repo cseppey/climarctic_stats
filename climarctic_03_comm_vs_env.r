@@ -24,10 +24,10 @@ dir.create(dir_cve, showWarnings=F)
 file <- paste0(dir_save, '00_lst_comm.Rdata')
 load(file)
 
-file <- paste0(dir_save, '03_lst_comm.Rdata')
-if(file.exists(file)){
-  load(file)
-}
+# file <- paste0(dir_save, '03_lst_comm.Rdata')
+# if(file.exists(file)){
+#   load(file)
+# }
 
 #########
 permu <- 1000
@@ -39,7 +39,7 @@ fact_3 <- c('site','moisture','depth')
 # loop on communities
 for(i in names(lst_comm)){
   stat2 <- NULL
-  for(j in names(lst_comm[[i]])){
+  for(j in 'rrf2'){#names(lst_comm[[i]])){
 
     if(is.null(lst_comm[[i]][[j]])){
       next
@@ -48,8 +48,7 @@ for(i in names(lst_comm)){
     env <- lst_comm[[i]][[j]]$env
     env <- env[,c('site','moisture','depth','plot_in_moist_in_site',
                   'pH','C_N','S','NO3','NH4','P_labile',
-                  'sand_nz','silt_nz','clay_nz','rh','om',
-                  "CH4","CO2","N2O")]
+                  'silt','clay','rh','om',"CH4","CO2","N2O")]
     
     # transfo ####
     print(paste(i, j, 'transfo'))
@@ -58,7 +57,8 @@ for(i in names(lst_comm)){
     mr <- mr[rowSums(mr) != 0,colSums(mr) != 0]
     env <- env[row.names(mr),]
     
-    transfo <- c('raw','hell','log')
+    # transfo <- c('raw','hell','log')
+    transfo <- c('log')
     
     if('lst_trsf_bc' %in% names(lst_comm[[i]][[j]]) == F){
       lst_trsf <- foreach(k=transfo) %dopar% {
@@ -71,7 +71,7 @@ for(i in names(lst_comm)){
       }
       names(lst_trsf) <- transfo
       lst_trsf <- append(lst_trsf, list(env))
-      names(lst_trsf)[4] <- 'env'
+      names(lst_trsf)[length(lst_trsf)] <- 'env'
       
       lst_comm[[i]][[j]][['lst_trsf_bc']] <- lst_trsf
     }
@@ -180,7 +180,7 @@ for(i in names(lst_comm)){
             va1 <- RsquareAdj(l)[[1]] - RsquareAdj(upd)[[1]]
             
             rda1 <- capscale(as.formula(paste('b~', m)), data=e, scale=T)
-            pv2 <- signif(anova(rda1)$`Pr(>F)`[1], 2)
+            pv2 <- signif(anova(rda1, permutations=permu)$`Pr(>F)`[1], 2)
             va2 <- RsquareAdj(rda1)[[1]] 
             
             pvs[m,] <- c(pv1, va1, pv2, va2)
