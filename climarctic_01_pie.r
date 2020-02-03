@@ -24,8 +24,7 @@ load(file)
 
 # loop on raw and rraref
 lst_pie <- NULL
-# for(h in c('clr','raw','rrf2','rrf')){
-for(h in 'rrf2'){
+for(h in names(lst_comm[[1]])){
   print(h)
 
   # pie ####
@@ -44,11 +43,17 @@ for(h in 'rrf2'){
                       "08_16S_cyano"  = 4:6,
                       "09_nirS"       = 1:4)
     
+    root <- switch(i,
+                   "01_16S_bact"   = 'Bacteria',
+                   "02_18S_euk"    = 'Eukaryota',
+                   "05_ITS_fun"    = 'Fungi',
+                   "08_16S_cyano"  = 'Cyanobacteriia')
+    
     #---
-    mr <- lst_comm[[i]][[h]]$mr
+    mr <- as.matrix(lst_comm[[i]][[h]]$mr)
     taxo <- lst_comm[[i]][[h]]$taxo
     env <- lst_comm[[i]][[h]]$env
-    
+
     # prep cluster
     cl <- makeSOCKcluster(2)
     
@@ -67,12 +72,13 @@ for(h in 'rrf2'){
       clusterEvalQ(cl2, library(plotrix))
       clusterEvalQ(cl2, library(foreach))
       clusterEvalQ(cl2, library(doSNOW))
+      clusterEvalQ(cl2, library(compositions))
       
       registerDoSNOW(cl2)
       
       #-------------
       if(j == 'richness'){
-        mr <- decostand(mr, 'pa')
+        mr <- ifelse(mr == 0, 0, 1)
       }
       
       #---
@@ -80,7 +86,7 @@ for(h in 'rrf2'){
       selec_smp1 <-list(Knud  =which(env$site     == 'Knudsenheia'),
                         Ossian=which(env$site     == 'Ossian'),
                         dry   =which(env$moisture == 'dry'),
-                        medium=which(env$moisture == 'medium'),
+                        medium=which(env$moisture == 'intermediate'),
                         wet   =which(env$moisture == 'wet'),
                         top   =which(env$depth    == 'top'),
                         deep  =which(env$depth    == 'deep'))
@@ -144,7 +150,8 @@ for(h in 'rrf2'){
       rm(mat_per_smp2)
       
       # arg pie
-      lst_arg_pie <- list(tot       =list(selec_smp=factor(rep(paste0('top\nsmp_nb: ', nrow(mr), ' seq nb: ', sum(mr)), nrow(mr))),
+      lst_arg_pie <- list(tot       =list(selec_smp=factor(rep(paste0('top\nsmp_nb: ', nrow(mr), ' seq nb: ', 
+                                                                      ifelse(h == 'clr', 'NA', sum(mr))), nrow(mr))),
                                           mat_lay=matrix(c(0,1,2,0), nrow=1),
                                           wdt_lay=c(0.1,1,2.5,0.1), hei_lay=c(1.5),
                                           wdt=9, hei=6),
@@ -158,7 +165,7 @@ for(h in 'rrf2'){
                                           wdt=15, hei=7),
                           per_smp   =list(selec_smp=factor(paste0(row.names(mr), 
                                                                   ifelse(j == 'abundance', ' nb seq: ', ' OTU nb: '),
-                                                                  rowSums(mr), '\n', env$moist_in_site, '_', env$depth)),
+                                                                  round(rowSums(mr)), '\n', env$moist_in_site, '_', env$depth)),
                                           mat_lay=cbind(mat_per_smp, rep(max(lay)+1, nrow(mat_per_smp))),
                                           wdt_lay=c(rep(1, 18), 3), hei_lay=c(rep(1.1,6)),
                                           wdt=57, hei=18)
@@ -174,8 +181,15 @@ for(h in 'rrf2'){
         pdf(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.pdf'), width=kl$wdt, height=kl$hei)
         # cairo_ps(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.eps'), width=kl$wdt, height=kl$hei)
         
-        pie <- pie_taxo(decostand(mr, 'total'), taxo, tax_lev, kl$selec_smp, mat_lay=kl$mat_lay, cex=1.2, box=F, thresh=0.02,
-                        wdt_lay=kl$wdt_lay, hei_lay=kl$hei_lay, info_perc=F, rshift=0.0, last_tax_text=F)
+        m <- mr
+        if(h == 'clr'){
+          m <- t(apply(mr, 1, function(x) ifelse(x == 0, 0, (x-min(x)+1)/diff(c(min(x),max(x)+1)))))
+        }
+        m <- decostand(m, 'total')
+        
+        pie <- pie_taxo(m, taxo, tax_lev, kl$selec_smp, mat_lay=kl$mat_lay, cex=1.2, box=F,
+                        thresh=0.02, wdt_lay=kl$wdt_lay, hei_lay=kl$hei_lay, info_perc=F,
+                        rshift=0.0, last_tax_text=F, root=root)
         
         dev.off()
         
