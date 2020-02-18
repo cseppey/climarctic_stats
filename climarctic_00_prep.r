@@ -8,7 +8,7 @@ gc()
 require(foreach)
 require(doSNOW) # e.g. makeSOCKcluster()
 require(RColorBrewer) # brewer.pal 
-require(Compositions)
+require(compositions)
 require(abind)
 
 # prep cluster
@@ -43,7 +43,7 @@ env_ini_chim <- env_ini_chim[c(matrix(1:36, nrow=2, byrow=T)),]
 env_ini_chim <- env_ini_chim[as.numeric(gl(36,3)),]
 
 # take the interesting variables
-env_tot <- cbind.data.frame(env_ini_fact[,c(2:5,7:15)], env_ini_chim[,c('silt','clay')])
+env_tot <- cbind.data.frame(env_ini_fact[,c(2:5,7:15)], env_ini_chim[,c('sand','silt','clay')])
 names(env_tot)[1:9] <- c('site','moisture','plot','depth','quadrat','empty','fresh','dry','burn')
 
 env_tot[,c('fresh','dry','burn')] <- sapply(env_tot[,c('fresh','dry','burn')], function(x) x-env_tot$empty)
@@ -83,6 +83,7 @@ prim_names <- c('01_16S_bact','02_18S_euk','03_pmoA_mb661','04_pmoA_A682','05_IT
 ind_prim <- c(1,2,5,8)
 
 # loop the primers ####
+pdf(paste0(dir_prep, '00_distro.pdf'))
 lst_comm <- NULL
 for(i in ind_prim) {
   
@@ -104,6 +105,9 @@ for(i in ind_prim) {
     save(mr_ini, ass_ini, fa_ini, file=file) 
   }
   
+  print(head(row.names(ass_ini)))
+  print(head(names(mr_ini)))
+  
   # cleaning ----
   # reorganize mr ---
   mr_tot <- mr_ini[grep('T|B', row.names(mr_ini)),]
@@ -122,10 +126,35 @@ for(i in ind_prim) {
   }
   
   mr_tot <- mr_tot[grep('T', row.names(mr_tot)),ind_conta == F]
-  mr_tot <- mr_tot[,colSums(mr_tot) != 0]
+  mr_tot <- mr_tot[rowSums(mr_tot) != 0,colSums(mr_tot) != 0]
   
   print(c(sum(mr_tot), ncol(mr_tot)))
 
+  # find low sequence samples
+  lrs <- log(sort(rowSums(mr_tot)))
+  
+  x <- brks <- 1:length(lrs)
+  
+  mse <- NULL
+  for(j in 1:length(brks)){
+    mod <- lm(lrs~x*(x <= brks[j]) + x*(x < brks[j]))
+    mse <- c(mse, summary(mod)$sigma)
+  }
+  
+  min_mse <- which(mse == min(mse))
+  
+  mod <- lm(lrs ~ x*(x < min_mse) + x*(x > min_mse))
+  co <- coef(mod)
+  
+  #---
+  plot(lrs~x, xlab='', ylab='log of rowSums', main=prim_names[i])
+  
+  curve(co[1]+co[3] + (co[2]+co[5])*x, add=T, from=1, to=min_mse+2)
+  curve(co[1]+co[4] + (co[2])*x, add=T, from=min_mse+2, to=length(lrs))
+  abline(v=min_mse+2, lty=3)  
+  
+  low_seq <- names(lrs)[1:which(mse == min(mse))]
+  
   # reorganize fa ---
   n_fa <- as.character(fa_ini[seq(1,nrow(fa_ini), by=2),])
   n_fa <- substr(n_fa, 2, nchar(n_fa))
@@ -146,8 +175,6 @@ for(i in ind_prim) {
   ass_tot$taxo <- gsub('Elusimicrobia|Lineage_IIa', 'Elusimicrobia|u', ass_tot$taxo, fixed=T)
   
   # correct taxon with different parent taxon
-  
-  
   ass_tot <- ass_tot[names(mr_tot),]
 
   #---
@@ -268,21 +295,37 @@ for(i in ind_prim) {
   }
   
   env_sort <- env_tot[row.names(mr_sort),]
+  env_sort <- data.frame(env_sort, low_seq=row.names(env_sort) %in% low_seq)
   
   # communities compositional normalisation ----
   mr_clr <- clr(mr_sort)
+  mr_clr <- as.data.frame(matrix(c(mr_clr), nrow=nrow(mr_clr), dimnames=dimnames(mr_clr)))
   
   env_clr <- env_tot[row.names(mr_clr),]
-
+  env_clr <- data.frame(env_clr, low_seq=row.names(env_clr) %in% low_seq)
+  
   ass_clr <- ass_sort[names(mr_clr),]
   taxo_clr <- taxo_sort[names(mr_clr),]
+
+  # wiehout the low_sequences samples (piecewise regression)
+  mr_nls <- mr_sort[env_sort$low_seq == F,]
+  mr_nls <- mr_nls[,colSums(mr_nls) != 0]
   
+  mr_clr2 <- clr(mr_nls)
+  mr_clr2 <- as.data.frame(matrix(c(mr_clr2), nrow=nrow(mr_clr2), dimnames=dimnames(mr_clr2)))
   
-  lst_comm[[prim_names[i]]] <- list(raw= list(env=env_sort, mr=mr_sort, ass=ass_sort, taxo=taxo_sort)
-                                    , clr= list(env=env_clr , mr=mr_clr , ass=ass_clr , taxo=taxo_clr)
-                                    )
+  env_clr2 <- env_tot[row.names(mr_clr2),]
+  
+  ass_clr2 <- ass_sort[names(mr_clr2),]
+  taxo_clr2 <- taxo_sort[names(mr_clr2),]
+  
+  lst_comm[[prim_names[i]]] <- list(raw = list(env=env_sort, mr=mr_sort, ass=ass_sort, taxo=taxo_sort),
+                                    clr = list(env=env_clr , mr=mr_clr , ass=ass_clr , taxo=taxo_clr),
+                                    clr2= list(env=env_clr2, mr=mr_clr2, ass=ass_clr2, taxo=taxo_clr2))
 
 }
+
+dev.off()
 
 #---
 file <- paste0(dir_save, '00_lst_comm.Rdata')
