@@ -22,14 +22,9 @@ source('bin/src/my_prog/R/pie_taxo.r')
 file <- paste0(dir_save, '00_lst_comm.Rdata')
 load(file)
 
-# loop on raw and rraref
 lst_pie <- NULL
-for(h in names(lst_comm[[1]])){
-  print(h)
-
-  # pie ####
   for(i in names(lst_comm)){
-
+  
     print(i)
     
     tax_lev <- switch(i,
@@ -50,10 +45,10 @@ for(h in names(lst_comm[[1]])){
                    "08_16S_cyano"  = 'Cyanobacteriia')
     
     #---
-    mr <- as.matrix(lst_comm[[i]][[h]]$mr)
-    taxo <- lst_comm[[i]][[h]]$taxo
-    env <- lst_comm[[i]][[h]]$env
-
+    mr <- as.matrix(lst_comm[[i]]$raw$mr)
+    taxo <- lst_comm[[i]]$raw$taxo
+    env <- lst_comm[[i]]$raw$env
+  
     # prep cluster
     cl <- makeSOCKcluster(2)
     
@@ -150,8 +145,7 @@ for(h in names(lst_comm[[1]])){
       rm(mat_per_smp2)
       
       # arg pie
-      lst_arg_pie <- list(tot       =list(selec_smp=factor(rep(paste0('top\nsmp_nb: ', nrow(mr), ' seq nb: ', 
-                                                                      ifelse(h == 'clr', 'NA', sum(mr))), nrow(mr))),
+      lst_arg_pie <- list(tot       =list(selec_smp=factor(rep(paste0('top\nsmp_nb: ', nrow(mr), ' seq nb: ', sum(mr)), nrow(mr))),
                                           mat_lay=matrix(c(0,1,2,0), nrow=1),
                                           wdt_lay=c(0.1,1,2.5,0.1), hei_lay=c(1.5),
                                           wdt=9, hei=6),
@@ -175,16 +169,13 @@ for(h in names(lst_comm[[1]])){
       lst_pie2 <- foreach(k=rev(seq_along(lst_arg_pie)), .verbose=T) %dopar% {
         kn <- names(lst_arg_pie)[k]
         kl <- lst_arg_pie[[k]]
-
+  
         source('bin/src/my_prog/R/pie_taxo.r')
         
-        pdf(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.pdf'), width=kl$wdt, height=kl$hei)
-        # cairo_ps(paste0(dir_pie, 'pie_', h, '_', kn, '_', i, '_', j, '.eps'), width=kl$wdt, height=kl$hei)
+        # pdf(paste0(dir_pie, 'pie_', kn, '_', i, '_', j, '.pdf'), width=kl$wdt, height=kl$hei)
+        cairo_ps(paste0(dir_pie, 'pie_', kn, '_', i, '_', j, '.eps'), width=kl$wdt, height=kl$hei)
         
         m <- mr
-        if(h == 'clr'){
-          m <- t(apply(mr, 1, function(x) ifelse(x == 0, 0, (x-min(x)+1)/diff(c(min(x),max(x)+1)))))
-        }
         m <- decostand(m, 'total')
         
         pie <- pie_taxo(m, taxo, tax_lev, kl$selec_smp, mat_lay=kl$mat_lay, cex=1.2, box=F,
@@ -208,10 +199,8 @@ for(h in names(lst_comm[[1]])){
     
     names(lst_pie1) <- c('abundance','richness')
     
-    lst_pie[[h]][[i]] <- lst_pie1
+    lst_pie[[i]] <- lst_pie1
   }
-  
-}
 
 #---
 file <- paste0(dir_save, '01_lst_pie.Rdata')

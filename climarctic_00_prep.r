@@ -3,7 +3,6 @@
 #####
 
 rm(list=ls())
-gc()
 
 require(foreach)
 require(doSNOW) # e.g. makeSOCKcluster()
@@ -83,7 +82,7 @@ prim_names <- c('01_16S_bact','02_18S_euk','03_pmoA_mb661','04_pmoA_A682','05_IT
 ind_prim <- c(1,2,5,8)
 
 # loop the primers ####
-pdf(paste0(dir_prep, '00_distro.pdf'))
+# pdf(paste0(dir_prep, '00_distro.pdf'))
 lst_comm <- NULL
 for(i in ind_prim) {
   
@@ -104,9 +103,6 @@ for(i in ind_prim) {
     fa_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.fa'))
     save(mr_ini, ass_ini, fa_ini, file=file) 
   }
-  
-  print(head(row.names(ass_ini)))
-  print(head(names(mr_ini)))
   
   # cleaning ----
   # reorganize mr ---
@@ -147,6 +143,8 @@ for(i in ind_prim) {
   co <- coef(mod)
   
   #---
+  cairo_ps(paste0(dir_prep, 'piecewise_', prim_names[i],'.eps'))
+  
   plot(lrs~x, xlab='', ylab='log of rowSums', main=prim_names[i])
   
   curve(co[1]+co[3] + (co[2]+co[5])*x, add=T, from=1, to=min_mse+2)
@@ -155,15 +153,23 @@ for(i in ind_prim) {
   
   low_seq <- names(lrs)[1:which(mse == min(mse))]
   
+  dev.off()
+  
   # reorganize fa ---
   n_fa <- as.character(fa_ini[seq(1,nrow(fa_ini), by=2),])
   n_fa <- substr(n_fa, 2, nchar(n_fa))
 
   fa_tot <- fa_ini[seq(2,nrow(fa_ini), by=2),]
   names(fa_tot) <- n_fa
+  
+  fa_tot <- fa_tot[names(mr_tot)]
 
   # reorganize ass ---
-  ass_tot <- data.frame(taxo=ass_ini$V2, seq=fa_tot)
+  tax <- ass_ini$V2
+  names(tax) <- row.names(ass_ini)
+  tax <- tax[names(mr_tot)]
+  
+  ass_tot <- data.frame(taxo=tax, seq=fa_tot)
   
   ass_tot$taxo <- gsub('[[:punct:]][[:digit:]]{2,3}[[:punct:]]{2}|;', '|', ass_tot$taxo)
 
@@ -280,10 +286,10 @@ for(i in ind_prim) {
                        '2' = 'Metazoa|Embryophyceae',
                        '3' = 'Life|TRUE_X',
                        '4' = 'Life|TRUE_X',
-                       '5' = 'Plantae',
+                       '5' = 'Life|Plantae',
                        '6' = 'Life|TRUE_X',
                        '7' = 'Life|TRUE_X',
-                       '8' = 'Life|TRUE_X|Sericytochromatia|Vampirivibrionia|Bacteria_X|Chloroplast|Acidobacteriota|Actinobacteriota|Chloroflexi|Firmicutes|Methylomirabilota|Nitrospinota|Patescibacteria|Planctomycetota|Verrucomicrobiota|WS4',
+                       '8' = 'Life|TRUE_X|Bacteria_X|Chloroplast|Acidobacteriota|Actinobacteriota|Chloroflexi|Firmicutes|Methylomirabilota|Nitrospinota|Patescibacteria|Planctomycetota|Verrucomicrobiota|WS4',
                        '9' = 'Life|TRUE_X')
   ind_tf <- grepl(taxo_false, taxo_sort[,1]) | grepl(taxo_false, taxo_sort[,2]) | grepl(taxo_false, ass_sort$taxo)
   
@@ -325,7 +331,7 @@ for(i in ind_prim) {
 
 }
 
-dev.off()
+# dev.off()
 
 #---
 file <- paste0(dir_save, '00_lst_comm.Rdata')
