@@ -10,6 +10,8 @@ require(RColorBrewer) # brewer.pal
 require(compositions)
 require(abind)
 
+source('~/bin/src/my_prog/R/rarecurveMPI.r')
+
 # prep cluster
 cl <- makeSOCKcluster(4)
 
@@ -69,10 +71,13 @@ lev_mois <- levels(env_tot$moisture)
 lev_dept <- levels(env_tot$depth)
 
 pal_dark2 <- brewer.pal(8, 'Dark2')
-lst_palev <- list(site    =list(pal=pal_dark2[1:2], lev=lev_site),
-                  moisture=list(pal=pal_dark2[3:5], lev=lev_mois),
-                  depth   =list(pal=pal_dark2[6:7], lev=lev_dept)
+lst_palev <- list(site    =pal_dark2[1:2],# lev=lev_site,
+                  moisture=pal_dark2[3:5],# lev=lev_mois,
+                  depth   =pal_dark2[6:7]#, lev=lev_dept
 )
+names(lst_palev$site) <- lev_site
+names(lst_palev$moisture) <- lev_mois
+names(lst_palev$depth) <- lev_dept
 
 # permu and primer names ----
 permu <- 10000
@@ -82,7 +87,9 @@ prim_names <- c('01_16S_bact','02_18S_euk','03_pmoA_mb661','04_pmoA_A682','05_IT
 ind_prim <- c(1,2,5,8)
 
 # loop the primers ####
-# pdf(paste0(dir_prep, '00_distro.pdf'))
+pdf(paste0(dir_prep, '00_distro.pdf'), width=15, height=20)
+par(mfrow=c(4,3))
+
 lst_comm <- NULL
 for(i in ind_prim) {
   
@@ -143,7 +150,7 @@ for(i in ind_prim) {
   co <- coef(mod)
   
   #---
-  cairo_ps(paste0(dir_prep, 'piecewise_', prim_names[i],'.eps'))
+  # cairo_ps(paste0(dir_prep, 'piecewise_', prim_names[i],'.eps'))
   
   plot(lrs~x, xlab='', ylab='log of rowSums', main=prim_names[i])
   
@@ -153,7 +160,7 @@ for(i in ind_prim) {
   
   low_seq <- names(lrs)[1:which(mse == min(mse))]
   
-  dev.off()
+  # dev.off()
   
   # reorganize fa ---
   n_fa <- as.character(fa_ini[seq(1,nrow(fa_ini), by=2),])
@@ -302,6 +309,9 @@ for(i in ind_prim) {
   
   env_sort <- env_tot[row.names(mr_sort),]
   env_sort <- data.frame(env_sort, low_seq=row.names(env_sort) %in% low_seq)
+
+  # rarefaction curves ----
+  rarecurveMPI(mr_sort[env_sort$low_seq == F,], cl, step=5, label=T)
   
   # communities compositional normalisation ----
   mr_clr <- clr(mr_sort)
@@ -331,7 +341,7 @@ for(i in ind_prim) {
 
 }
 
-# dev.off()
+dev.off()
 
 #---
 file <- paste0(dir_save, '00_lst_comm.Rdata')

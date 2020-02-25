@@ -76,32 +76,58 @@ for(i in names(lst_comm)){
       mr <- ifelse(mr == 0, 0, 1)
     }
     
-    #---
-    # arrange the smp nb and seq nb for per fact and cross fact
-    selec_smp1 <-list(Knud  =which(env$site     == 'Knudsenheia'),
-                      Ossian=which(env$site     == 'Ossian'),
-                      dry   =which(env$moisture == 'dry'),
-                      medium=which(env$moisture == 'intermediate'),
-                      wet   =which(env$moisture == 'wet'),
-                      top   =which(env$depth    == 'top'),
-                      deep  =which(env$depth    == 'deep'))
+    #--- 
+    # arrange the smp nb and seq nb for per fact
+    selec_smp_pf <-list(Knud  =which(env$site     == 'Knudsenheia'),
+                        Ossian=which(env$site     == 'Ossian'),
+                        dry   =which(env$moisture == 'dry'),
+                        medium=which(env$moisture == 'intermediate'),
+                        wet   =which(env$moisture == 'wet'),
+                        top   =which(env$depth    == 'top'),
+                        deep  =which(env$depth    == 'deep'))
     
     if(j == 'abundance'){
-      nb_seq_otu <- parLapply(cl2, selec_smp1, function(x, mr=mr) if(length(x)){return(round(sum(mr[x,])))}, mr)
+      nb_seq_otu <- parLapply(cl2, selec_smp_pf, function(x, mr=mr) if(length(x)){return(round(sum(mr[x,])))}, mr)
     } else {
-      nb_seq_otu <- parLapply(cl2, selec_smp1, function(x, mr=mr) if(length(x)){return(length(which(colSums(mr[x,]) != 0)))}, mr)
+      nb_seq_otu <- parLapply(cl2, selec_smp_pf, function(x, mr=mr) if(length(x)){return(length(which(colSums(mr[x,]) != 0)))}, mr)
     }
     
-    names(selec_smp1) <- paste0(names(selec_smp1), ' smp nb: ', 
-                                parLapply(cl2, selec_smp1, function(x, mr=mr) nrow(mr[x,]), mr),
+    names(selec_smp_pf) <- paste0(names(selec_smp_pf), ' smp nb: ', 
+                                parLapply(cl2, selec_smp_pf, function(x, mr=mr) nrow(mr[x,]), mr),
                                 ifelse(j == 'abundance', '\nseq nb: ', '\nOTU nb: '), 
                                 nb_seq_otu)
     
     #---
-    selec_smp2 <- factor(paste(env$moist_in_site, env$depth, sep='_'))
+    # arrange the smp nb and seq nb for per_fact within depth
+    
+    selec_smp_pd <- list(Knudsenheia_top   = which(env$depth == 'top'  & env$site == 'Knudsenheia'),
+                         Ossian_top        = which(env$depth == 'top'  & env$site == 'Ossian'),
+                         dry_top           = which(env$depth == 'top'  & env$moisture == 'dry'),
+                         intermediate_top  = which(env$depth == 'top'  & env$moisture == 'intermediate'),
+                         wet_top           = which(env$depth == 'top'  & env$moisture == 'wet'),
+                         Knudsenheia_deep  = which(env$depth == 'deep' & env$site == 'Knudsenheia'),
+                         Ossian_deep       = which(env$depth == 'deep' & env$site == 'Ossian'),
+                         dry_deep          = which(env$depth == 'deep' & env$moisture == 'dry'),
+                         intermediate_deep = which(env$depth == 'deep' & env$moisture == 'intermediate'),
+                         wet_deep          = which(env$depth == 'deep' & env$moisture == 'wet'))
+    
+    if(j == 'abundance'){
+      nb_seq_otu <- parLapply(cl2, selec_smp_pd, function(x, mr=mr) if(length(x)){return(round(sum(mr[x,])))}, mr)
+    } else {
+      nb_seq_otu <- parLapply(cl2, selec_smp_pd, function(x, mr=mr) if(length(x)){return(length(which(colSums(mr[x,]) != 0)))}, mr)
+    }
+    
+    names(selec_smp_pd) <- paste0(names(selec_smp_pd), ' smp nb: ', 
+                                  parLapply(cl2, selec_smp_pd, function(x, mr=mr) nrow(mr[x,]), mr),
+                                  ifelse(j == 'abundance', '\nseq nb: ', '\nOTU nb: '), 
+                                  nb_seq_otu)
+    
+    #---
+    # arrange the smp nb and seq nb for cross fact
+    selec_smp_cf <- factor(paste(env$moist_in_site, env$depth, sep='_'))
     lev <- apply(expand.grid(levels(env$moist_in_site), levels(env$depth)),
                                        1, function(x) paste(x, collapse='_'))
-    selec_smp2 <- as.character(selec_smp2)
+    selec_smp_cf <- as.character(selec_smp_cf)
     
     rs <- rowSums(mr)
       
@@ -112,11 +138,11 @@ for(i in names(lst_comm)){
       ltot <- c(ltot, paste0(k, '\nsmp nb: ', length(ind),
                              ifelse(j == 'abundance', ' seq nb: ', ' OTU nb: '), round(sum(rs[ind]))))
       if(length(ind)){
-        selec_smp2[ind] <- ltot[length(ltot)]
+        selec_smp_cf[ind] <- ltot[length(ltot)]
       }
     }
     
-    selec_smp2 <- factor(selec_smp2, levels=ltot)
+    selec_smp_cf <- factor(selec_smp_cf, levels=ltot)
     
     # arrange the layout for the per smp
     lay <- NULL
@@ -149,11 +175,15 @@ for(i in names(lst_comm)){
                                         mat_lay=matrix(c(0,1,2,0), nrow=1),
                                         wdt_lay=c(0.1,1,2.5,0.1), hei_lay=c(1.5),
                                         wdt=9, hei=6),
-                        per_fact  =list(selec_smp=selec_smp1,
+                        per_fact  =list(selec_smp=selec_smp_pf,
                                         mat_lay=matrix(c(0,1,2,8, 3:5,8, 0,6,7,8), nrow=3, byrow=T),
                                         wdt_lay=c(1,1,1,3), hei_lay=c(rep(1.1, 3)),
                                         wdt=15, hei=7),
-                        cross_fact=list(selec_smp=selec_smp2,
+                        per_depth =list(selec_smp=selec_smp_pd,
+                                        mat_lay=matrix(c(1,2,0, 3,4,5, 6,7,0, 8,9,10, 11,11,11), nrow=3),
+                                        wdt_lay=c(1,1,1,1, 3), hei_lay=c(rep(1.1, 3)),
+                                        wdt=15, hei=7),
+                        cross_fact=list(selec_smp=selec_smp_cf,
                                         mat_lay=matrix(c(1,2,7,8,13, 3,4,9,10,13, 5,6,11,12,13), nrow=3, byrow=T),
                                         wdt_lay=c(1,1,1,1, 3), hei_lay=c(rep(1.1, 3)),
                                         wdt=15, hei=7),
