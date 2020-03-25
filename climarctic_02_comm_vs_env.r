@@ -2,6 +2,10 @@
 # climarctic comm vs env
 #####
 
+print('#####
+      Climarctic 02 communities vs environment
+      #####')
+
 rm(list=ls())
 
 require(foreach)
@@ -19,7 +23,7 @@ registerDoSNOW(cl)
 # dir loads ####
 dir_out  <- 'Projets/Climarctic/stats/MBC/out/'
 dir_save <- paste0(dir_out, 'saves/') 
-dir_cve  <- paste0(dir_out, '03_comm_vs_env/')
+dir_cve  <- paste0(dir_out, '02_comm_vs_env/')
 dir.create(dir_cve, showWarnings=F)
 
 #---
@@ -30,9 +34,6 @@ load(file)
 #########
 permu <- 1000
 #########
-
-
-fact_3 <- c('site','moisture','depth')
 
 # loop on communities
 lsts <- foreach(h=c('top|deep','top','deep'), .verbose=T) %dopar% {
@@ -75,7 +76,7 @@ lsts <- foreach(h=c('top|deep','top','deep'), .verbose=T) %dopar% {
     
     print('ordistep')
     
-    file <- paste0(dir_save, '03_rda_parsi_clr2_', i, '_', h, '.Rdata')
+    file <- paste0(dir_save, '02_rda_parsi_clr2_', i, '_', h, '.Rdata')
     if(file.exists(file) == F){
       set.seed(0)
       f <- formula(paste0(ifelse(h == 'top|deep', 'm~depth+rh+Condition(', 'm~rh+Condition('), cond, ')'))
@@ -102,7 +103,7 @@ lsts <- foreach(h=c('top|deep','top','deep'), .verbose=T) %dopar% {
     
     # retreive info on the two models ---
     
-    file <- paste0(dir_save, '03_lst_ordi_clr2_', i, '_', h, '.Rdata')
+    file <- paste0(dir_save, '02_lst_ordi_clr2_', i, '_', h, '.Rdata')
     if(file.exists(file) == F){
     
       lst_ordi <- NULL
@@ -222,7 +223,7 @@ lsts <- foreach(h=c('top|deep','top','deep'), .verbose=T) %dopar% {
         
         env_in_ordi <- env[row.names(env) %in% row.names(j$site),]
         
-        pal <- lst_palev[[fact]]$pal[env_in_ordi[[fact]]]
+        pal <- lst_palev[[fact]][env_in_ordi[[fact]]]
         
         #---
         plot(j$site, xlim=range(rbind(coord[,1])), ylim=range(coord[,2]), xaxt='n', yaxt='n',
@@ -288,7 +289,7 @@ lsts <- foreach(h=c('top|deep','top','deep'), .verbose=T) %dopar% {
 
 names(lsts) <- c('top|deep','top','deep')
 
-file <- paste0(dir_save, '03_lsts.Rdata')
+file <- paste0(dir_save, '02_lsts.Rdata')
 save(lsts, file=file)
 load(file)
 

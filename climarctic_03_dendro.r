@@ -2,6 +2,10 @@
 # climarctic dendro
 #####
 
+print('#####
+      Climarctic 03 dendrogram
+      #####')
+
 rm(list=ls())
 
 require(dendextend)
@@ -10,7 +14,7 @@ require(dendextend)
 # dir loads ####
 dir_out  <- 'Projets/Climarctic/stats/MBC/out/'
 dir_save <- paste0(dir_out, 'saves/') 
-dir_dend  <- paste0(dir_out, '02_dendro/')
+dir_dend  <- paste0(dir_out, '03_dendro/')
 dir.create(dir_dend, showWarnings=F)
 
 #---
@@ -27,7 +31,7 @@ load(file)
 for(i in names(lst_comm)) {
   
   mr_clr <- lst_comm[[i]]$clr2$mr
-  mr_raw <- lst_comm[[i]]$raw$mr[row.names(mr_clr),]
+  mr_raw <- lst_comm[[i]]$raw$mr[row.names(mr_clr),names(mr_clr)]
   taxo <- lst_comm[[i]]$raw$taxo[names(mr_raw),]
   env <- lst_comm[[i]]$clr2$env
   
@@ -134,11 +138,11 @@ for(i in names(lst_comm)) {
   y <- mean(c(y0,y0+y_stretch))
   
   for(j in x0){
-    cs <- cumsum(comm[,j])*y_stretch
-    rect(j-0.5, c(0,cs[-length(cs)])+y0, j+0.5, cs+y0, col=pal_tax, border=NA, xpd=NA)
+    cs <- cumsum(rev(comm[,j]))*y_stretch
+    rect(j-0.5, c(0,cs[-length(cs)])+y0, j+0.5, cs+y0, col=rev(pal_tax), border=NA, xpd=NA)
   }
   
-  text(usr[1]+xrng*0.00, y, 'taxonomic\nproportion', srt=90)
+  text(usr[1]+xrng*0.00, y, 'taxa relative abundance', srt=90)
 
   legend(usr[2]+xrng*0, y, row.names(comm), pch=19,
          col=pal_tax, xpd=NA, bty='n', cex=0.75, xjust=0, yjust=0.5)

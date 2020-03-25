@@ -2,8 +2,11 @@
 # climarctic pie charts
 #####
 
+print('#####
+      Climarctic 01 pie charts
+      #####')
+
 rm(list=ls())
-gc()
 
 require(foreach)
 require(doSNOW) # e.g. makeSOCKcluster()

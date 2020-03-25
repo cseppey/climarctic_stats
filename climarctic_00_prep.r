@@ -2,6 +2,10 @@
 # climarctic preparation
 #####
 
+print('#####
+      Climarctic 00 data prep4
+      #####')
+
 rm(list=ls())
 
 require(foreach)
@@ -79,12 +83,15 @@ names(lst_palev$site) <- lev_site
 names(lst_palev$moisture) <- lev_mois
 names(lst_palev$depth) <- lev_dept
 
-# permu and primer names ----
+# permu and primer names and factors names ----
 permu <- 10000
 
 #---
 prim_names <- c('01_16S_bact','02_18S_euk','03_pmoA_mb661','04_pmoA_A682','05_ITS_fun','06_phoD','07_nifH', '08_16S_cyano','09_nirS')
 ind_prim <- c(1,2,5,8)
+
+#---
+fact_3 <- c('site','moisture','depth')
 
 # loop the primers ####
 pdf(paste0(dir_prep, '00_distro.pdf'), width=15, height=20)
@@ -115,8 +122,18 @@ for(i in ind_prim) {
   # reorganize mr ---
   mr_tot <- mr_ini[grep('T|B', row.names(mr_ini)),]
   
+  # removal of faild cyaB sample
+  if(i == 8){
+    ech_scrap <- c('T019','T029','T031','T033','T097','T103','T105','T004','T006','T010','T012','T016','T018',
+                   'T020','T028','T022','T030','T034','T036','T040','T046','T042','T048','T056','T062','T068',
+                   'T086','T098','T005','T007','T011','T079','T023','T032','T078','T052','T072','T038','T045')
+    ind_scrap <- grepl(paste(ech_scrap, collapse='|'), row.names(mr_tot))
+    mr_tot <- mr_tot[-ind_scrap,]
+  }
+  
   # remove the OTU found in the blanks
   ind_blk <- grepl('B', row.names(mr_tot))
+
   rs <- rowSums(mr_tot)
   ord <- order(rs)
   plot(rs[ord], col=as.numeric(ind_blk[ord])+1, pch=19, main=prim_names[i])
@@ -133,7 +150,7 @@ for(i in ind_prim) {
   
   print(c(sum(mr_tot), ncol(mr_tot)))
 
-  # find low sequence samples
+  # find low sequence samples (piecewise linear model)
   lrs <- log(sort(rowSums(mr_tot)))
   
   x <- brks <- 1:length(lrs)
@@ -345,7 +362,7 @@ dev.off()
 
 #---
 file <- paste0(dir_save, '00_lst_comm.Rdata')
-save(lst_comm, env_tot, lst_palev, permu, file=file)
+save(lst_comm, env_tot, lst_palev, permu, fact_3, file=file)
 
 file <- paste0(dir_save, '00_env_tot.Rdata')
 save(env_tot, file=file)

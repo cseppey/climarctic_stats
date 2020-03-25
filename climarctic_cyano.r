@@ -186,7 +186,7 @@ require(ape)
 for(h in c('GTRCAT','GTRGAMMA')){
   for(i in c('_trim_V1-V3','_no_V1-V3','-antar')){
     tree <- read.tree(paste0('Projets/Climarctic/bioinfo/Katya_cyaB/01_dominant_cya_vs_other_dataset/', h, '/RAxML_bestTree.out', i))
-    pdf(paste0('Projets/Climarctic/stats/MBC/out/04_cya/phylo_climarctic_vs_other/', h, '/', i, '.pdf'), width=10, height=20)
+    pdf(paste0('Projets/Climarctic/stats/MBC/out/cyan/phylo_climarctic_vs_other/', h, '/', i, '.pdf'), width=10, height=20)
     
     plus <- ifelse(i == '_trim_V1-3', 0, 1)
     
@@ -211,7 +211,7 @@ lin$V2 <- substr(as.character(lin$V2), 2, nchar(as.character(lin$V2)))
 
 blst_mat <- as.matrix(blst)
 
-file <- 'Projets/Climarctic/stats/MBC/out/04_cya/top10.csv'
+file <- 'Projets/Climarctic/stats/MBC/out/cyan/top10.csv'
 if(file.exists(file)){file.remove(file)}
 
 for(i in lin$V2){
