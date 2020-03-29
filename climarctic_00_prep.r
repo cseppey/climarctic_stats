@@ -89,17 +89,19 @@ permu <- 10000
 #---
 prim_names <- c('01_16S_bact','02_18S_euk','03_pmoA_mb661','04_pmoA_A682','05_ITS_fun','06_phoD','07_nifH', '08_16S_cyano','09_nirS')
 ind_prim <- c(1,2,5,8)
+n_comm <- prim_names[ind_prim]
 
 #---
 fact_3 <- c('site','moisture','depth')
 
 # loop the primers ####
-pdf(paste0(dir_prep, '00_distro.pdf'), width=15, height=20)
-par(mfrow=c(4,3))
+# pdf(paste0(dir_prep, '00_distro.pdf'), width=15, height=20)
+# par(mfrow=c(4,3))
 
 lst_comm <- NULL
 for(i in ind_prim) {
   
+  # initialize ----
   print(prim_names[i])
   
   id_plate <- as.character(i)
@@ -118,8 +120,8 @@ for(i in ind_prim) {
     save(mr_ini, ass_ini, fa_ini, file=file) 
   }
   
-  # cleaning ----
-  # reorganize mr ---
+  # cleaning ####
+  # reorganize mr ----
   mr_tot <- mr_ini[grep('T|B', row.names(mr_ini)),]
   
   # removal of faild cyaB sample
@@ -167,19 +169,16 @@ for(i in ind_prim) {
   co <- coef(mod)
   
   #---
-  # cairo_ps(paste0(dir_prep, 'piecewise_', prim_names[i],'.eps'))
-  
   plot(lrs~x, xlab='', ylab='log of rowSums', main=prim_names[i])
   
-  curve(co[1]+co[3] + (co[2]+co[5])*x, add=T, from=1, to=min_mse+2)
-  curve(co[1]+co[4] + (co[2])*x, add=T, from=min_mse+2, to=length(lrs))
-  abline(v=min_mse+2, lty=3)  
+  curve(co[1]+co[3] + (co[2]+co[5])*x, add=T, from=1, to=min_mse)
+  curve(co[1]+co[4] + (co[2])*x, add=T, from=min_mse, to=length(lrs))
+  abline(v=min_mse, lty=3)  
   
   low_seq <- names(lrs)[1:which(mse == min(mse))]
   
-  # dev.off()
-  
-  # reorganize fa ---
+  # reorganize ass ----
+  # reorganize fa
   n_fa <- as.character(fa_ini[seq(1,nrow(fa_ini), by=2),])
   n_fa <- substr(n_fa, 2, nchar(n_fa))
 
@@ -188,7 +187,7 @@ for(i in ind_prim) {
   
   fa_tot <- fa_tot[names(mr_tot)]
 
-  # reorganize ass ---
+  # reorganize ass
   tax <- ass_ini$V2
   names(tax) <- row.names(ass_ini)
   tax <- tax[names(mr_tot)]
@@ -207,7 +206,7 @@ for(i in ind_prim) {
   # correct taxon with different parent taxon
   ass_tot <- ass_tot[names(mr_tot),]
 
-  #---
+  # make the taxonomy ----
   taxo_tot <- strsplit(as.character(ass_tot$taxo), '|' , fixed=T)
   nb_lev <- length(taxo_tot[[1]])
 
@@ -326,9 +325,21 @@ for(i in ind_prim) {
   
   env_sort <- env_tot[row.names(mr_sort),]
   env_sort <- data.frame(env_sort, low_seq=row.names(env_sort) %in% low_seq)
-
+  
+  # supress the last column of the taxo of bacteria (uninformative)
+  if(i == 1){
+    taxo_sort <- taxo_sort[,-ncol(taxo_sort)]
+  }
+  
+  # name tax_level
+  names(taxo_sort) <- switch(as.character(i), 
+                             '1' = c('reign','phylum','class','order','family','genus','species'),
+                             '2' = c('reign','phylum','division','class','order','family','genus','species'),
+                             '5' = c('division','class','family','family_2','family_3','genus','species'),
+                             '8' = c('reign','phylum','division','class','order','family','genus','species'))
+  
   # rarefaction curves ----
-  rarecurveMPI(mr_sort[env_sort$low_seq == F,], cl, step=5, label=T)
+  # rarecurveMPI(mr_sort[env_sort$low_seq == F,], cl, step=5, label=T)
   
   # communities compositional normalisation ----
   mr_clr <- clr(mr_sort)
@@ -358,11 +369,11 @@ for(i in ind_prim) {
 
 }
 
-dev.off()
+# dev.off()
 
 #---
 file <- paste0(dir_save, '00_lst_comm.Rdata')
-save(lst_comm, env_tot, lst_palev, permu, fact_3, file=file)
+save(lst_comm, env_tot, lst_palev, permu, fact_3, n_comm, file=file)
 
 file <- paste0(dir_save, '00_env_tot.Rdata')
 save(env_tot, file=file)
