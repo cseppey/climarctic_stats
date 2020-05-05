@@ -2,9 +2,7 @@
 # climarctic pie charts
 #####
 
-print('#####
-      Climarctic 01 pie charts
-      #####')
+print('##### Climarctic 01 pie charts #####')
 
 rm(list=ls())
 
@@ -26,26 +24,21 @@ file <- paste0(dir_save, '00_lst_comm.Rdata')
 load(file)
 
 lst_pie <- NULL
-for(i in names(lst_comm)){
+for(i in n_comm){
 
   print(i)
   
   tax_lev <- switch(i,
                     "01_16S_bact"   = 1:5,
                     "02_18S_euk"    = 1:5,
-                    "03_pmoA_mb661" = 4:7,
-                    "04_pmoA_A682"  = 4:7,
                     "05_ITS_fun"    = 1:5,
-                    "06_phoD"       = 1:4,
-                    "07_nifH"       = 1:4,
-                    "08_16S_cyano"  = 4:6,
-                    "09_nirS"       = 1:4)
+                    "08_16S_cyano"  = 2:4)
   
   root <- switch(i,
                  "01_16S_bact"   = 'Bacteria',
                  "02_18S_euk"    = 'Eukaryota',
                  "05_ITS_fun"    = 'Fungi',
-                 "08_16S_cyano"  = 'Cyanobacteriia')
+                 "08_16S_cyano"  = 'Cyanobacteria')
   
   #---
   mr <- as.matrix(lst_comm[[i]]$raw$mr)

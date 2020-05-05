@@ -2,22 +2,21 @@
 # climarctic preparation
 #####
 
-print('#####
-      Climarctic 00 data prep4
-      #####')
+print('##### Climarctic 00 data prep #####')
 
 rm(list=ls())
 
 require(foreach)
 require(doSNOW) # e.g. makeSOCKcluster()
 require(RColorBrewer) # brewer.pal 
-require(compositions)
-require(abind)
+require(zCompositions)
 
 source('~/bin/src/my_prog/R/rarecurveMPI.r')
 
 # prep cluster
 cl <- makeSOCKcluster(4)
+
+clusterEvalQ(cl, library(zCompositions))
 
 registerDoSNOW(cl)
 
@@ -69,6 +68,8 @@ env_tot$plot_in_moist_in_site <- factor(apply(env_tot[,c('plot','moist_in_site')
 env_tot$quad_in_plot_in_moist <- factor(apply(env_tot[,c('quadrat','plot_in_moist_in_site')], 1, function(x) paste(x, collapse='_')))
 env_tot$combi <- factor(paste(env_tot$moist_in_site, env_tot$depth, sep='_'))
 
+env_tot$pH[env_tot$pH > 8.5] <- NA
+
 # palette ----
 lev_site <- levels(env_tot$site)
 lev_mois <- levels(env_tot$moisture)
@@ -95,6 +96,7 @@ n_comm <- prim_names[ind_prim]
 fact_3 <- c('site','moisture','depth')
 
 # loop the primers ####
+
 # pdf(paste0(dir_prep, '00_distro.pdf'), width=15, height=20)
 # par(mfrow=c(4,3))
 
@@ -115,9 +117,9 @@ for(i in ind_prim) {
     load(file)
   } else {
     mr_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.mr'), h=T)
-    ass_ini <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.ass'), row.names=1)
     fa_ini  <- read.table(paste0(dir_in, 'from_cluster/', id_plate, '/', id_plate, '_clust.fa'))
-    save(mr_ini, ass_ini, fa_ini, file=file) 
+    lst_ass_ini <- lapply(list.files(paste0(dir_in, 'from_cluster/', id_plate), '.ass', full.names=T), read.table)
+    save(mr_ini, lst_ass_ini, fa_ini, file=file) 
   }
   
   # cleaning ####
@@ -167,15 +169,19 @@ for(i in ind_prim) {
   
   mod <- lm(lrs ~ x*(x < min_mse) + x*(x > min_mse))
   co <- coef(mod)
+
+  low_seq <- names(lrs)[1:which(mse == min(mse))]
   
   #---
+  cairo_ps(paste0(dir_prep, 'piecewise_', prim_names[i], '.eps'))
   plot(lrs~x, xlab='', ylab='log of rowSums', main=prim_names[i])
   
   curve(co[1]+co[3] + (co[2]+co[5])*x, add=T, from=1, to=min_mse)
   curve(co[1]+co[4] + (co[2])*x, add=T, from=min_mse, to=length(lrs))
-  abline(v=min_mse, lty=3)  
+  abline(v=min_mse, lty=3)
   
-  low_seq <- names(lrs)[1:which(mse == min(mse))]
+  dev.off()
+  
   
   # reorganize ass ----
   # reorganize fa
@@ -188,105 +194,147 @@ for(i in ind_prim) {
   fa_tot <- fa_tot[names(mr_tot)]
 
   # reorganize ass
-  tax <- ass_ini$V2
-  names(tax) <- row.names(ass_ini)
-  tax <- tax[names(mr_tot)]
-  
-  ass_tot <- data.frame(taxo=tax, seq=fa_tot)
-  
-  ass_tot$taxo <- gsub('[[:punct:]][[:digit:]]{2,3}[[:punct:]]{2}|;', '|', ass_tot$taxo)
-
-  # correct the taxon that are found at many tax lev
-  ass_tot$taxo <- gsub('Lineage_IIa|Elusimicrobia', 'Elusimicrobia|Lineage_IIa', ass_tot$taxo, fixed=T)
-  ass_tot$taxo <- gsub('Candidatus_Magasanikbacteria|Parcubacteria', 'Candidatus_Magasanikbacteria|Candidatus_Magasanikbacteria_unclassified',
-                       ass_tot$taxo, fixed=T)
-  ass_tot$taxo <- gsub('TM7|Candidatus_Saccharibacteria', 'TM7|u', ass_tot$taxo, fixed=T)
-  ass_tot$taxo <- gsub('Elusimicrobia|Lineage_IIa', 'Elusimicrobia|u', ass_tot$taxo, fixed=T)
-  
-  # correct taxon with different parent taxon
-  ass_tot <- ass_tot[names(mr_tot),]
-
-  # make the taxonomy ----
-  taxo_tot <- strsplit(as.character(ass_tot$taxo), '|' , fixed=T)
-  nb_lev <- length(taxo_tot[[1]])
-
-  taxo_tot <- matrix(unlist(taxo_tot), ncol=nb_lev, byrow=T)
-  row.names(taxo_tot) <- row.names(ass_tot)
-
-  taxo_tot <- as.data.frame(t(apply(taxo_tot, 1, function(x) {
+  lst_ass_tot <- NULL
+  for(j in seq_along(lst_ass_ini)){
+    ass_ini <- lst_ass_ini[[j]]
     
-    # scrap taxonomy correction
-    ind_scrap <- which(x %in% 'Geobacter_sp.'
-                       | x %in% 'Acidobacteria'
-                       | x %in% 'Acidobacteria_bacterium'
-                       | x %in% 'Rhodospirillales_bacterium'
-                       | x %in% 'Actinobacteria_bacterium'
-                       | x %in% 'Sterolibacterium'
-                       | x %in% 'Sphingosinicella_sp.'
-                       | x %in% 'Sphingomonas_sp.'
-                       | x %in% 'Rhodoferax_sp.'
-                       | x %in% 'Rhodococcus_sp.'
-                       | x %in% 'Rhodobacter_sp.'
-                       | x %in% 'Pseudanabaena'
-                       | x %in% 'Nocardioides_sp.'
-                       | x %in% 'Microbacterium_sp.'
-                       | x %in% 'Mesorhizobium_sp.'
-                       | x %in% 'Leptothrix_sp.'
-                       | x %in% 'Kribbella_sp.'
-                       | x %in% 'Devosia_sp.'
-                       | x %in% 'Cellulomonas_sp.'
-                       | x %in% 'Caulobacter_sp.'
-                       | x %in% 'Caenimonas_sp.'
-                       | x %in% 'Betaproteobacteria_bacterium'
-                       | x %in% 'Bacteroidetes_bacterium'
-                       | x %in% 'Afipia_sp.'
-                       | x %in% 'Afipia_genosp.'
-                       | x %in% 'Xanthomonadaceae_bacterium'
-                       | x %in% 'Sphingobacteriaceae_bacterium'
-                       | x %in% 'Rhodospirillaceae_bacterium'
-                       | x %in% 'Monodopsis_sp.'
-                       | x %in% 'Cytophagaceae_bacterium'
-                       | x %in% 'Caulobacteraceae_bacterium'
-                       | x %in% 'Candidatus'
-                       | x %in% 'Sphingobacteriales_bacterium'
-                       | x %in% 'Bdellovibrionales_bacterium'
-                       | x %in% 'Burkholderiales_bacterium'
-                       | x %in% 'Hypsibius_dujardini'
-                       | x %in% 'Nostoc'
-                       | x %in% 'Verrucomicrobia'
-                       | x %in% 'Synechococcus'
-                       | x %in% 'Sphingobacterium'
-                       | x %in% 'Sorangiineae'
-                       | x %in% 'Nitrospirae'
-                       | x %in% 'Armatimonadetes_bacterium'
-                       | x %in% 'Antarctic'
-                       | x %in% 'Clostridiales_bacterium'
-    )[1]
-    if(is.na(ind_scrap) == F) x[ind_scrap:length(x)] <- 'u'
-    
-    x <- gsub('.*Incertae_.*|Unknown|.*-[pcofgs]$|.*_unclassified', 'u', x)
-    x <- gsub('_Incertae|_clade|_lineage|_terrestrial|_marine|_genosp.|_sensu|_sp.|_bacterium','', x)
+    tax <- ass_ini$V2
+    names(tax) <- ass_ini$V1
+    tax <- tax[names(mr_tot)]
+  
+    ass_tot <- data.frame(taxo=tax, seq=fa_tot)
+  
+    ass_tot$taxo <- gsub('[[:punct:]][[:digit:]]{2,3}[[:punct:]]{2}|;', '|', ass_tot$taxo)
 
-    for(j in 2:length(x)){
-      if(x[j] %in% x[1:(j-1)]){
-        x[j] <- 'u'
+    # correct the taxon that are found at many tax lev
+    ass_tot$taxo <- gsub('Lineage_IIa|Elusimicrobia', 'Elusimicrobia|Lineage_IIa', ass_tot$taxo, fixed=T)
+    ass_tot$taxo <- gsub('Candidatus_Magasanikbacteria|Parcubacteria', 'Candidatus_Magasanikbacteria|Candidatus_Magasanikbacteria_unclassified',
+                         ass_tot$taxo, fixed=T)
+    ass_tot$taxo <- gsub('TM7|Candidatus_Saccharibacteria', 'TM7|u', ass_tot$taxo, fixed=T)
+    ass_tot$taxo <- gsub('Elusimicrobia|Lineage_IIa', 'Elusimicrobia|u', ass_tot$taxo, fixed=T)
+    
+    # correct taxon with different parent taxon
+    ass_tot <- ass_tot[names(mr_tot),]
+  
+    # make the taxonomy ----
+    taxo_tot <- strsplit(as.character(ass_tot$taxo), '|' , fixed=T)
+    nb_lev <- length(taxo_tot[[1]])
+  
+    taxo_tot <- matrix(unlist(taxo_tot), ncol=nb_lev, byrow=T)
+    row.names(taxo_tot) <- row.names(ass_tot)
+  
+    taxo_tot <- as.data.frame(t(parApply(cl, taxo_tot, 1, function(x) {
+      
+      # scrap taxonomy correction
+      ind_scrap <- which(x %in% 'Geobacter_sp.'
+                         | x %in% 'Acidobacteria'
+                         | x %in% 'Acidobacteria_bacterium'
+                         | x %in% 'Rhodospirillales_bacterium'
+                         | x %in% 'Actinobacteria_bacterium'
+                         | x %in% 'Sterolibacterium'
+                         | x %in% 'Sphingosinicella_sp.'
+                         | x %in% 'Sphingomonas_sp.'
+                         | x %in% 'Rhodoferax_sp.'
+                         | x %in% 'Rhodococcus_sp.'
+                         | x %in% 'Rhodobacter_sp.'
+                         | x %in% 'Pseudanabaena'
+                         | x %in% 'Nocardioides_sp.'
+                         | x %in% 'Microbacterium_sp.'
+                         | x %in% 'Mesorhizobium_sp.'
+                         | x %in% 'Leptothrix_sp.'
+                         | x %in% 'Kribbella_sp.'
+                         | x %in% 'Devosia_sp.'
+                         | x %in% 'Cellulomonas_sp.'
+                         | x %in% 'Caulobacter_sp.'
+                         | x %in% 'Caenimonas_sp.'
+                         | x %in% 'Betaproteobacteria_bacterium'
+                         | x %in% 'Bacteroidetes_bacterium'
+                         | x %in% 'Afipia_sp.'
+                         | x %in% 'Afipia_genosp.'
+                         | x %in% 'Xanthomonadaceae_bacterium'
+                         | x %in% 'Sphingobacteriaceae_bacterium'
+                         | x %in% 'Rhodospirillaceae_bacterium'
+                         | x %in% 'Monodopsis_sp.'
+                         | x %in% 'Cytophagaceae_bacterium'
+                         | x %in% 'Caulobacteraceae_bacterium'
+                         | x %in% 'Candidatus'
+                         | x %in% 'Sphingobacteriales_bacterium'
+                         | x %in% 'Bdellovibrionales_bacterium'
+                         | x %in% 'Burkholderiales_bacterium'
+                         | x %in% 'Hypsibius_dujardini'
+                         | x %in% 'Nostoc'
+                         | x %in% 'Verrucomicrobia'
+                         | x %in% 'Synechococcus'
+                         | x %in% 'Sphingobacterium'
+                         | x %in% 'Sorangiineae'
+                         | x %in% 'Nitrospirae'
+                         | x %in% 'Armatimonadetes_bacterium'
+                         | x %in% 'Antarctic'
+                         | x %in% 'Clostridiales_bacterium'
+      )[1]
+      if(is.na(ind_scrap) == F) x[ind_scrap:length(x)] <- 'u'
+      
+      x <- gsub('.*Incertae_.*|Unknown|.*-[pcofgs]$|.*_unclassified', 'u', x)
+      x <- gsub('_Incertae|_clade|_lineage|_terrestrial|_marine|_genosp.|_sensu|_sp.|_bacterium','', x)
+  
+      for(j in 2:length(x)){
+        if(x[j] %in% x[1:(j-1)]){
+          x[j] <- 'u'
+        }
       }
-    }
-    
-    ind_unc <- grep('^[[:lower:]]', x)
-    if(length(ind_unc)){
-      if(ind_unc[1] == 1){
-        x[1] <- 'Life'
-        ind_unc <- ind_unc[-1]
+      
+      ind_unc <- grep('^[[:lower:]]', x)
+      if(length(ind_unc)){
+        if(ind_unc[1] == 1){
+          x[1] <- 'Life'
+          ind_unc <- ind_unc[-1]
+        }
       }
-    }
-    for(j in ind_unc){
-      x[j] <- ifelse(grepl('_X', x[j-1]), paste0(x[j-1], 'X'), paste0(x[j-1], '_X'))
-    }
-    return(x)
-  })))
-
+      for(j in ind_unc){
+        x[j] <- ifelse(grepl('_X', x[j-1]), paste0(x[j-1], 'X'), paste0(x[j-1], '_X'))
+      }
+      return(x)
+    })))
+  
+    lst_ass_tot[[j]] <- list(ass_tot=ass_tot, taxo_tot=taxo_tot) 
+  }
+  
+  # rename OTU according to dataset
+  id <- switch(prim_names[i],
+               '01_16S_bact' = 'bac',
+               '02_18S_euk' = 'euk',
+               '05_ITS_fun' = 'fun',
+               '08_16S_cyano' = 'cya')
+  
+  names(mr_tot) <- sub('X_', paste0(id, '_'), names(mr_tot))
+  
+  lst_ass_tot <- lapply(lst_ass_tot, function(x) lapply(x, function(y){
+    z <- y
+    row.names(z) <- names(mr_tot)
+    return(z)
+  }))
+  
   # sort taxo
+  ass_tot <- lst_ass_tot[[1]]$ass_tot
+  taxo_tot <- lst_ass_tot[[1]]$taxo_tot
+  
+  if(i == 5){ # improve the taxo with blastn best match of the OTUs against Unite
+    tt1 <- as.matrix(lst_ass_tot[[1]]$taxo_tot)
+    tt2 <- as.matrix(lst_ass_tot[[2]]$taxo_tot)
+    ass1 <- as.matrix(lst_ass_tot[[1]]$ass_tot)
+    ass2 <- as.matrix(lst_ass_tot[[2]]$ass_tot)
+    
+    ind_FX <- tt1[,2] == 'Fungi_X'
+    
+    tt1[ind_FX,] <- tt2[ind_FX,]
+    ass1[ind_FX,] <- ass2[ind_FX,]
+    
+    taxo_tot <- as.data.frame(tt1)
+    ass_tot <- as.data.frame(ass1)
+    
+  }
+  
+  #---
   ord_taxo <- order(ass_tot$taxo)
 
   ass_sort <- ass_tot[ord_taxo,]
@@ -305,22 +353,26 @@ for(i in ind_prim) {
   
   # taxo_clean
   taxo_false <- switch(i,
-                       '1' = 'Chloroplast|Mitochondria',
-                       '2' = 'Metazoa|Embryophyceae',
-                       '3' = 'Life|TRUE_X',
-                       '4' = 'Life|TRUE_X',
-                       '5' = 'Life|Plantae',
-                       '6' = 'Life|TRUE_X',
-                       '7' = 'Life|TRUE_X',
-                       '8' = 'Life|TRUE_X|Bacteria_X|Chloroplast|Acidobacteriota|Actinobacteriota|Chloroflexi|Firmicutes|Methylomirabilota|Nitrospinota|Patescibacteria|Planctomycetota|Verrucomicrobiota|WS4',
-                       '9' = 'Life|TRUE_X')
+                       '1' = c('Chloroplast','Mitochondria'),
+                       '2' = c('Metazoa','Embryophyceae'),
+                       '3' = c('Life','TRUE_X'),
+                       '4' = c('Life','TRUE_X'),
+                       '5' = c('Life','Plantae','Chromista','Animalia','Protista'),
+                       '6' = c('Life','TRUE_X'),
+                       '7' = c('Life','TRUE_X'),
+                       '8' = c('Life','TRUE_X','Bacteria_X','Chloroplast','Acidobacteriota','Actinobacteria','Actinobacteriota',
+                               'Armatimonadetes','Chloroflexi','Firmicutes','GN02','Methylomirabilota','MVP-21','Nitrospinota',
+                               'OD1','OP11','OP3','OP8','Patescibacteria','Planctomycetota','Planctomycetes','Proteobacteria',
+                               'TM7','Verrucomicrobiota','WS4'),
+                       '9' = c('Life','TRUE_X'))
+  taxo_false <- paste0(taxo_false, collapse='|')
   ind_tf <- grepl(taxo_false, taxo_sort[,1]) | grepl(taxo_false, taxo_sort[,2]) | grepl(taxo_false, ass_sort$taxo)
   
   if(length(which(ind_tf))){
     ass_sort <- droplevels(ass_sort[ind_tf == F,])
     mr_sort <- mr_sort[,ind_tf == F]
     mr_sort <- mr_sort[rowSums(mr_sort) != 0,]
-    taxo_sort <- droplevels(taxo_sort[ind_tf == F,])
+    taxo_sort <- droplevels(as.data.frame(taxo_sort)[ind_tf == F,])
   }
   
   env_sort <- env_tot[row.names(mr_sort),]
@@ -330,20 +382,25 @@ for(i in ind_prim) {
   if(i == 1){
     taxo_sort <- taxo_sort[,-ncol(taxo_sort)]
   }
+  if(i == 8){
+    taxo_sort <- taxo_sort[,-c(1,ncol(taxo_sort))]
+  }
   
   # name tax_level
   names(taxo_sort) <- switch(as.character(i), 
                              '1' = c('reign','phylum','class','order','family','genus','species'),
                              '2' = c('reign','phylum','division','class','order','family','genus','species'),
-                             '5' = c('division','class','family','family_2','family_3','genus','species'),
-                             '8' = c('reign','phylum','division','class','order','family','genus','species'))
+                             '5' = c('reign','division','class','order','family','genus','species'),
+                             '8' = c('phylum','class','order','family','genus'))
   
   # rarefaction curves ----
   # rarecurveMPI(mr_sort[env_sort$low_seq == F,], cl, step=5, label=T)
   
   # communities compositional normalisation ----
-  mr_clr <- clr(mr_sort)
-  mr_clr <- as.data.frame(matrix(c(mr_clr), nrow=nrow(mr_clr), dimnames=dimnames(mr_clr)))
+  mr_sort2 <- mr_sort[,colSums(decostand(mr_sort, 'pa')) > 1] # take out the OTU found in only one sample otherwise, the replacment of 0 give negative values
+  
+  system.time(mr_rcz <- cmultRepl(mr_sort2, method='CZM', output='p-counts')) #30 sec
+  mr_clr <- as.data.frame(t(apply(mr_rcz, 1, function(x) log(x) - mean(log(x)) )))
   
   env_clr <- env_tot[row.names(mr_clr),]
   env_clr <- data.frame(env_clr, low_seq=row.names(env_clr) %in% low_seq)
@@ -351,24 +408,42 @@ for(i in ind_prim) {
   ass_clr <- ass_sort[names(mr_clr),]
   taxo_clr <- taxo_sort[names(mr_clr),]
 
-  # wiehout the low_sequences samples (piecewise regression)
+  # without the low_sequences samples (piecewise regression)
   mr_nls <- mr_sort[env_sort$low_seq == F,]
-  mr_nls <- mr_nls[,colSums(mr_nls) != 0]
-  
-  mr_clr2 <- clr(mr_nls)
-  mr_clr2 <- as.data.frame(matrix(c(mr_clr2), nrow=nrow(mr_clr2), dimnames=dimnames(mr_clr2)))
+  mr_nls <- mr_nls[,colSums(decostand(mr_nls, 'pa')) > 1]
+
+  system.time(mr_rcz <- cmultRepl(mr_nls, method='CZM', output='p-counts')) #30 sec
+  mr_clr2 <- as.data.frame(t(apply(mr_rcz, 1, function(x) log(x) - mean(log(x)) )))
   
   env_clr2 <- env_tot[row.names(mr_clr2),]
   
   ass_clr2 <- ass_sort[names(mr_clr2),]
   taxo_clr2 <- taxo_sort[names(mr_clr2),]
   
-  lst_comm[[prim_names[i]]] <- list(raw = list(env=env_sort, mr=mr_sort, ass=ass_sort, taxo=taxo_sort),
-                                    clr = list(env=env_clr , mr=mr_clr , ass=ass_clr , taxo=taxo_clr),
-                                    clr2= list(env=env_clr2, mr=mr_clr2, ass=ass_clr2, taxo=taxo_clr2))
+  # in a third of the samples
+  mr_frac <- mr_nls[,colSums(decostand(mr_nls, 'pa')) > nrow(mr_nls)*0.1]
+  mr_frac <- mr_frac[rowSums(mr_frac) > 0,]
+  
+  system.time(mr_rcz <- cmultRepl(mr_frac, method='CZM', output='p-counts')) #30 sec
+  mr_clr3 <- as.data.frame(t(apply(mr_rcz, 1, function(x) log(x) - mean(log(x)) )))
+  
+  env_clr3 <- env_tot[row.names(mr_clr3),]
+  
+  ass_clr3 <- ass_sort[names(mr_clr3),]
+  taxo_clr3 <- taxo_sort[names(mr_clr3),]
+  
+  #---
+  lst <- list(raw = list(env=env_sort, mr=mr_sort, ass=ass_sort, taxo=taxo_sort, lst_ass_tot=lst_ass_tot, lst_ass_ini=lst_ass_ini),
+              clr = list(env=env_clr , mr=mr_clr , ass=ass_clr , taxo=taxo_clr),
+              clr2= list(env=env_clr2, mr=mr_clr2, ass=ass_clr2, taxo=taxo_clr2),
+              clr3= list(env=env_clr3, mr=mr_clr3, ass=ass_clr3, taxo=taxo_clr3))
 
+  # return(lst)
+  lst_comm[[prim_names[i]]] <- lst
+  
 }
 
+# names(lst_comm) <- n_comm
 # dev.off()
 
 #---

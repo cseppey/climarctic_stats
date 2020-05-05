@@ -2,9 +2,7 @@
 # climarctic dendro
 #####
 
-print('#####
-      Climarctic 03 dendrogram
-      #####')
+print('##### Climarctic 03 dendrogram #####')
 
 rm(list=ls())
 
@@ -21,14 +19,14 @@ dir.create(dir_dend, showWarnings=F)
 file <- paste0(dir_save, '00_lst_comm.Rdata')
 load(file)
 
-file <- paste0(dir_save, '03_lsts.Rdata')
+file <- paste0(dir_save, '02_lst_rda.Rdata')
 load(file)
 
 file <- paste0(dir_save, '01_lst_pie.Rdata')
 load(file)
 
 # loop the taxa
-for(i in names(lst_comm)) {
+for(i in n_comm) {
   
   mr_clr <- lst_comm[[i]]$clr2$mr
   mr_raw <- lst_comm[[i]]$raw$mr[row.names(mr_clr),names(mr_clr)]
@@ -68,7 +66,7 @@ for(i in names(lst_comm)) {
   # heatmap variables ---
   pal_var <- colorRampPalette(c('red','green'))(101)
   
-  var <- rev(attributes(lsts$`top|deep`[[i]]$lst_rda$parsi$mod$terminfo$terms)$term.labels)
+  var <- rev(attributes(lst_rda$`top|deep`[[i]]$lst_rda$parsi$mod$terminfo$terms)$term.labels)
   
   e <- env[,var]
   e <- e[labels(dend),sapply(e, is.numeric)]
@@ -95,7 +93,7 @@ for(i in names(lst_comm)) {
                  "01_16S_bact"   = 'Bacteria_X',
                  "02_18S_euk"    = 'Eukaryota_X',
                  "05_ITS_fun"    = 'Fungi_X',
-                 "08_16S_cyano"  = 'Cyanobacteriia_X')
+                 "08_16S_cyano"  = 'Cyanobacteria_X')
   ind_root <- which(row.names(comm) == root)
   comm <- rbind.data.frame(comm[-ind_root,],comm[ind_root,])
   
@@ -103,7 +101,7 @@ for(i in names(lst_comm)) {
   pal_tax <- lst_pie[[i]]$abundance$per_smp$lst_pal[[1]]
   
   # plot ---  
-  pdf(paste0(dir_dend, 'dend_', i, '.pdf'), width=15, height=15)
+  cairo_ps(paste0(dir_dend, 'dend_', i, '.eps'), width=15, height=15)
   par(mar=c(ncol(e)+30, 4, 4, 7), xpd=NA)
   
   plot(dend)

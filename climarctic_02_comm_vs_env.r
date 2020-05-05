@@ -2,9 +2,7 @@
 # climarctic comm vs env
 #####
 
-print('#####
-      Climarctic 02 communities vs environment
-      #####')
+print('##### Climarctic 02 communities vs environment #####')
 
 rm(list=ls())
 
@@ -32,17 +30,17 @@ load(file)
 
 
 #########
-permu <- 1000
+permu <- 10000
 #########
 
 # loop on communities
-lsts <- foreach(h=c('top|deep','top','deep'), .verbose=T) %dopar% {
+lst_rda <- foreach(h=c('top|deep','top','deep'), .verbose=T) %dopar% {
   
   cl2 <- makeSOCKcluster(2)
   registerDoSNOW(cl2)
   
   lst <- NULL
-  for(i in names(lst_comm)) {
+  for(i in n_comm) {
     
     mr <- lst_comm[[i]]$clr2$mr
     env <- lst_comm[[i]]$clr2$env
@@ -77,13 +75,13 @@ lsts <- foreach(h=c('top|deep','top','deep'), .verbose=T) %dopar% {
     print('ordistep')
     
     file <- paste0(dir_save, '02_rda_parsi_clr2_', i, '_', h, '.Rdata')
-    if(file.exists(file) == F){
+    if(file.exists(file)){
+      load(file)
+    } else {
       set.seed(0)
       f <- formula(paste0(ifelse(h == 'top|deep', 'm~depth+rh+Condition(', 'm~rh+Condition('), cond, ')'))
       rda_parsi <- ordistep(capscale(f, data=e, scale=T), formula(rda_full), parallel=4, trace=F)
       save(rda_parsi, file=file)
-    } else {
-      load(file)
     }
     
     v_parsi <- attributes(rda_parsi$terminfo$terms)$term.labels
@@ -104,8 +102,9 @@ lsts <- foreach(h=c('top|deep','top','deep'), .verbose=T) %dopar% {
     # retreive info on the two models ---
     
     file <- paste0(dir_save, '02_lst_ordi_clr2_', i, '_', h, '.Rdata')
-    if(file.exists(file) == F){
-    
+    if(file.exists(file)){
+      load(file)
+    } else {
       lst_ordi <- NULL
       for(j in 1:2){
         
@@ -188,8 +187,6 @@ lsts <- foreach(h=c('top|deep','top','deep'), .verbose=T) %dopar% {
       
       save(lst_ordi, file=file)
       
-    } else {
-      load(file)
     }
     
     # graf ----
@@ -270,8 +267,8 @@ lsts <- foreach(h=c('top|deep','top','deep'), .verbose=T) %dopar% {
       plot.new()
       
       # factors colors
-      legend(0.5,0.5, legend=c(unlist(sapply(lst_palev, '[[', 2))), bty='n', xjust=0.5, yjust=0.5,
-             pch=19, col=unlist(sapply(lst_palev, '[[', 1)))
+      legend(0.5,0.5, legend=sapply(strsplit(names(unlist(lst_palev)), '.', fixed=T), '[[', 2),
+             bty='n', xjust=0.5, yjust=0.5, pch=19, col=unlist(lst_palev))
       
       # dev.off()
     }
@@ -287,10 +284,10 @@ lsts <- foreach(h=c('top|deep','top','deep'), .verbose=T) %dopar% {
   return(lst)
 }
 
-names(lsts) <- c('top|deep','top','deep')
+names(lst_rda) <- c('top|deep','top','deep')
 
-file <- paste0(dir_save, '02_lsts.Rdata')
-save(lsts, file=file)
+file <- paste0(dir_save, '02_lst_rda.Rdata')
+save(lst_rda, file=file)
 load(file)
 
 #---
@@ -299,29 +296,30 @@ if(file.exists(file)){
   file.remove(file)
 }
 
-for(i in names(lsts)){
-  for(j in names(lsts[[i]])){
-    for(k in names(lsts[[i]][[j]]$lst_ordi)){
+for(i in names(lst_rda)){
+  for(j in names(lst_rda[[i]])){
+    for(k in names(lst_rda[[i]][[j]]$lst_ordi)){
       write.table(c(i,j,k), file, T, F, '\t')
-      write.table(lsts[[i]][[j]]$lst_ordi[[k]]$stat, file, T, F, '\t')
+      write.table(lst_rda[[i]][[j]]$lst_ordi[[k]]$stat, file, T, F, '\t')
     }
   }
 }
 
 # procrust rotation on the NMDS with common samples ####
+print("Procrust")
 
 # find the samples found in all datasets
-smp_4 <- names(which(table(unlist(lapply(lst_comm, function(x) row.names(x$clr$mr)))) == 4))
+smp_4 <- names(which(table(unlist(lapply(lst_comm, function(x) row.names(x$clr2$mr)))) == 4))
 
 # NMDS ---
 lst_nmds_4 <- lapply(lst_comm, function(x) {
-  m <- x$clr$mr[smp_4,]
+  m <- x$clr2$mr[smp_4,]
   m <- m[,colSums(m) != 0]
   return(metaMDS(m, distance='euc'))
 })
 
 # grafs
-for(i in names(lst_nmds_4)){
+for(i in n_comm){
   
   # pdf(paste0(dir_cve, 'nmds_4_', i, '.pdf'), width=10, height=7)
   cairo_ps(paste0(dir_cve, 'nmds_4_', i, '.eps'), width=10, height=7)
@@ -343,7 +341,7 @@ for(i in names(lst_nmds_4)){
     
     env_in_ordi <- env_tot[row.names(env_tot) %in% row.names(site),]
     
-    pal <- lst_palev[[fact]]$pal[env_in_ordi[[fact]]]
+    pal <- lst_palev[[fact]][env_in_ordi[[fact]]]
     
     #---
     plot(site, xlim=range(site[,1]), ylim=range(site[,2]), xaxt='n', yaxt='n',
@@ -375,8 +373,8 @@ for(i in names(lst_nmds_4)){
   text(0.5,0.75,i)
   
   # factors colors
-  legend(0.5,0.5, legend=c(unlist(sapply(lst_palev, '[[', 2))), bty='n', xjust=0.5, yjust=0.5,
-         pch=19, col=unlist(sapply(lst_palev, '[[', 1)))
+  legend(0.5,0.5, legend=sapply(strsplit(names(unlist(lst_palev)), '.', fixed=T), '[[', 2),
+         bty='n', xjust=0.5, yjust=0.5, pch=19, col=unlist(lst_palev))
   
   dev.off()
   
