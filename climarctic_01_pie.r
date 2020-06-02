@@ -41,9 +41,9 @@ for(i in n_comm){
                  "08_16S_cyano"  = 'Cyanobacteria')
   
   #---
-  mr <- as.matrix(lst_comm[[i]]$raw$mr)
-  taxo <- lst_comm[[i]]$raw$taxo
-  env <- lst_comm[[i]]$raw$env
+  mr <- as.matrix(lst_comm[[i]]$nls$mr)
+  taxo <- lst_comm[[i]]$nls$taxo
+  env <- lst_comm[[i]]$nls$env
 
   # prep cluster
   cl <- makeSOCKcluster(2)
@@ -55,10 +55,12 @@ for(i in n_comm){
   registerDoSNOW(cl)
   
   # loop on abundance and diversity
-  lst_pie1 <- foreach(j=c('abundance','richness'), .verbose=T) %dopar% {
+  jn <- c('abundance') # jn <- c('abundance', 'richness)
+  lst_pie1 <- foreach(j=jn, .verbose=T) %dopar% {
     
     # prep cluster
-    cl2 <- makeSOCKcluster(2)
+    # cl2 <- makeSOCKcluster(2)
+    cl2 <- makeSOCKcluster(4)
     
     clusterEvalQ(cl2, library(plotrix))
     clusterEvalQ(cl2, library(foreach))
@@ -114,14 +116,15 @@ for(i in n_comm){
     }
     
     names(selec_smp_pd) <- paste0(names(selec_smp_pd), ' smp nb: ', 
-                                  parLapply(cl2, selec_smp_pd, function(x, mr=mr) nrow(mr[x,]), mr),
+                                  sapply(parLapply(cl2, selec_smp_pd, function(x, mr=mr) nrow(mr[x,]), mr),
+                                         function(y) ifelse(is.null(y), 1, y)),
                                   ifelse(j == 'abundance', '\nseq nb: ', '\nOTU nb: '), 
                                   nb_seq_otu)
     
     #---
     # arrange the smp nb and seq nb for cross fact
-    selec_smp_cf <- factor(paste(env$moist_in_site, env$depth, sep='_'))
-    lev <- apply(expand.grid(levels(env$moist_in_site), levels(env$depth)),
+    selec_smp_cf <- factor(paste(env$MiS, env$depth, sep='_'))
+    lev <- apply(expand.grid(levels(env$MiS), levels(env$depth)),
                                        1, function(x) paste(x, collapse='_'))
     selec_smp_cf <- as.character(selec_smp_cf)
     
@@ -185,7 +188,7 @@ for(i in n_comm){
                                         wdt=15, hei=7),
                         per_smp   =list(selec_smp=factor(paste0(row.names(mr), 
                                                                 ifelse(j == 'abundance', ' nb seq: ', ' OTU nb: '),
-                                                                round(rowSums(mr)), '\n', env$moist_in_site, '_', env$depth)),
+                                                                round(rowSums(mr)), '\n', env$MiS, '_', env$depth)),
                                         mat_lay=cbind(mat_per_smp, rep(max(lay)+1, nrow(mat_per_smp))),
                                         wdt_lay=c(rep(1, 18), 3), hei_lay=c(rep(1.1,6)),
                                         wdt=57, hei=18)
@@ -204,8 +207,8 @@ for(i in n_comm){
       m <- mr
       m <- decostand(m, 'total')
       
-      pie <- pie_taxo(m, taxo, tax_lev, kl$selec_smp, mat_lay=kl$mat_lay, cex=1.2, box=F,
-                      thresh=0.02, wdt_lay=kl$wdt_lay, hei_lay=kl$hei_lay, info_perc=F,
+      pie <- pie_taxo(m, taxo, tax_lev, kl$selec_smp, mat_lay=kl$mat_lay, cex=0.5, box=F, # return cex to 1.2 and no percentage
+                      thresh=0.02, wdt_lay=kl$wdt_lay, hei_lay=kl$hei_lay, info_perc=T,
                       rshift=0.0, last_tax_text=F, root=root)
       
       dev.off()
@@ -223,7 +226,7 @@ for(i in n_comm){
   
   stopCluster(cl)
   
-  names(lst_pie1) <- c('abundance','richness')
+  names(lst_pie1) <- jn
   
   lst_pie[[i]] <- lst_pie1
 }

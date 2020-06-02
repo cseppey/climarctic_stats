@@ -261,14 +261,14 @@ get.pval = function(matrix, x.index, y.index, N.rand=1000, method="spearman", re
 pairs <- data.frame(combn(n_comm, 2))
 
 for(h in pairs){
-  hc <- as.character(h)  
+  hc <- as.character(h)
   print(hc)
   
-  env_1 <- lst_comm[[hc[1]]]$raw$env
-  mr_1 <-  lst_comm[[hc[1]]]$raw$mr[env_1$low_seq == F,]
+  env_1 <- lst_comm[[hc[1]]]$nls$env
+  mr_1 <-  lst_comm[[hc[1]]]$nls$mr[env_1$low_seq == F,]
   
-  env_2 <- lst_comm[[hc[2]]]$raw$env
-  mr_2 <-  lst_comm[[hc[2]]]$raw$mr[env_2$low_seq == F,]
+  env_2 <- lst_comm[[hc[2]]]$nls$env
+  mr_2 <-  lst_comm[[hc[2]]]$nls$mr[env_2$low_seq == F,]
   
   smps_inter <- intersect(row.names(mr_1), row.names(mr_2))
   
@@ -290,7 +290,7 @@ for(h in pairs){
   
   
   #%%%%%%%%%%
-  rng <- 1:100 #700 seq for first loops 1230 seq for snd loop
+  # rng <- 1:100 #h00 seq for first loops 1230 seq for snd loop
   
   # calculate network matrix only consider interactions between datasets, not within
   netmatrix <- data.frame(matrix(NA,nrow=ncol(indata_1),ncol=ncol(indata_2)))
@@ -323,14 +323,12 @@ for(h in pairs){
         if (cor_out$p.value > 0.05 | pval_kld > 0.05){
           netmatrix[sp1,sp2] <- as.numeric(0)
           kldmatrix[sp1,sp2] <- as.numeric(0)
-        }
-        else{
+        } else {
           if (sp1!=sp2){
             netmatrix[sp1,sp2] <- cor_out$estimate
             kldmatrix[sp1,sp2] <- kld_value
             
-          }
-          else{
+          } else {
             netmatrix[sp1,sp2] <- as.numeric(0)
             kldmatrix[sp1,sp2] <- as.numeric(0)
           }
@@ -431,7 +429,7 @@ for(h in pairs){
   pal <- NULL
   tax_lev <- 2:5
   for(i in seq_along(lst_pie)){
-    taxo <- lst_comm[[hc[i]]]$raw$taxo
+    taxo <- lst_comm[[hc[i]]]$nls$taxo
     taxo <- lst_pie[[i]][['taxo']] <- taxo[row.names(taxo) %in% unlist(dimnames(netmatrix_parse)),]
     
     mr <- lst_pie[[i]]$relabu[,row.names(taxo)]
@@ -455,12 +453,23 @@ for(h in pairs){
   tax_tot <- rbind(tax_tot[[1]], tax_tot[[2]])
   tax_tot <- tax_tot[vdf$name,]
   
+  np <- sapply(strsplit(gsub('other ','other_', names(pal)), ' '), '[[', 1)
+  
+  ltt <- sapply(as.character(tax_tot[,ncol(tax_tot)]), function(x){
+    y <- x
+    if(grepl('_X', y)){
+      y <- gsub('_X+', '', y)
+      y <- gsub('^', 'other_', y)
+    }
+    return(y)
+  })
+  
   col <- NULL
-  for(i in tax_tot[,ncol(tax_tot)]){
-    col <- c(col, pal[i == sapply(strsplit(names(pal), ' '), '[[', 1)])
+  for(i in ltt){
+    col <- c(col, pal[i == np])
   }
   
-  tax_tot <- cbind.data.frame(tax_tot, nb=sapply(strsplit(names(col), ' '), '[[', 2), col)
+  tax_tot <- cbind.data.frame(tax_tot, nb=sapply(strsplit(names(col), ' '), function(x) rev(x)[1]), col)
   
   V(g)$colour <- V(g)$color <- as.character(tax_tot$col)
   V(g)$label <- V(g)$name
@@ -487,7 +496,7 @@ for(h in pairs){
   hei <- 0.2*max(dim(netmatrix_parse)) + 2
   
   # cairo_ps(paste(dir_cooc, 'network_ITS_18S.eps'), width=12, height=8)
-  pdf(paste(dir_cooc, 'network_', paste(hc, collapse='_'), '.pdf'), width=wdt, height=hei)
+  pdf(paste0(dir_cooc, 'network_', paste(hc, collapse='_'), '.pdf'), width=wdt, height=hei)
   layout(matrix(c(1,2, 1,3), nrow=2, byrow=T), width=c(1.5,1))
   par(mai=rep(1,4), xpd=NA)
   
@@ -498,7 +507,7 @@ for(h in pairs){
   plot(tax_tot$x, tax_tot$y, axes=F, type='n', xlab='', ylab='')
   
   seg <- sapply(edf, function(x) sapply(x, function(y) tax_tot[y,'y']))
-  is_lic <- rownames(tax_tot)[apply(tax_tot[,1:4], 1, function(x) any(grepl('Cyanobacteria|Basidiomycota|Ascomycota|Chlorophyta', x)))]
+  is_lic <- rownames(tax_tot)[apply(tax_tot[,1:4], 1, function(x) any(grepl('Synechococcophycideae|Oscillatoriophycideae|Cyanobacteria|Basidiomycota|Ascomycota|Chlorophyta', x)))]
   col <- ifelse(apply(edf, 1, function(x) all(x %in% is_lic)), 2, 'grey80')
   segments(0,seg[,2],1,seg[,1], col=col)
   

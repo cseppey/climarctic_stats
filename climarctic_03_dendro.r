@@ -28,10 +28,10 @@ load(file)
 # loop the taxa
 for(i in n_comm) {
   
-  mr_clr <- lst_comm[[i]]$clr2$mr
-  mr_raw <- lst_comm[[i]]$raw$mr[row.names(mr_clr),names(mr_clr)]
-  taxo <- lst_comm[[i]]$raw$taxo[names(mr_raw),]
-  env <- lst_comm[[i]]$clr2$env
+  mr_clr <- lst_comm[[i]]$clr_nls$mr
+  mr_raw <- lst_comm[[i]]$nls$mr[row.names(mr_clr),names(mr_clr)]
+  taxo <- lst_comm[[i]]$nls$taxo[names(mr_raw),]
+  env <- lst_comm[[i]]$nls$env
   
   # dendrogram ----
   
@@ -49,9 +49,6 @@ for(i in n_comm) {
   
   dend <- set(dend, 'branches_lwd', 2)
   
-  # dend <- set(dend, 'by_labels_branches_col', row.names(env)[env[[fact1]] == 'top'],
-  #             TF_value=c(lst_palev[[fact1]][1], lst_palev[[fact1]][2]))
-  
   for(j in names(lst_palev[[fact1]])){
     for(k in row.names(env)[env[[fact1]] == j]){
       dend <- set(dend, 'by_labels_branches_col', k, TF_value=c(lst_palev[[fact1]][j], Inf))
@@ -66,7 +63,7 @@ for(i in n_comm) {
   # heatmap variables ---
   pal_var <- colorRampPalette(c('red','green'))(101)
   
-  var <- rev(attributes(lst_rda$`top|deep`[[i]]$lst_rda$parsi$mod$terminfo$terms)$term.labels)
+  var <- rev(attributes(out_rda$`top|deep`[[i]]$lst_rda$parsi$mod$terminfo$terms)$term.labels)
   
   e <- env[,var]
   e <- e[labels(dend),sapply(e, is.numeric)]
@@ -85,27 +82,19 @@ for(i in n_comm) {
   
   comm <- agg[,fact == F]
   names(comm) <- sapply(strsplit(names(comm), ' '), '[[', 1)
-  comm <- aggregate(comm[,labels(dend)], list(agg[,2]), sum)
+  comm <- aggregate(comm[,labels(dend)], list(agg[,ifelse(i == '02_18S_euk', 3, 2)]), sum)
   
   row.names(comm) <- comm[,1]
-  comm <- comm[,-1]
-  root <- switch(i,
-                 "01_16S_bact"   = 'Bacteria_X',
-                 "02_18S_euk"    = 'Eukaryota_X',
-                 "05_ITS_fun"    = 'Fungi_X',
-                 "08_16S_cyano"  = 'Cyanobacteria_X')
-  ind_root <- which(row.names(comm) == root)
-  comm <- rbind.data.frame(comm[-ind_root,],comm[ind_root,])
+  comm <- comm[unique(agg[,ifelse(i == '02_18S_euk', 3, 2)]),-1]
   
   # pal
-  pal_tax <- lst_pie[[i]]$abundance$per_smp$lst_pal[[1]]
+  pal_tax <- lst_pie[[i]]$abundance$per_smp$lst_pal[[ifelse(i == '02_18S_euk', 2, 1)]]
   
   # plot ---  
   cairo_ps(paste0(dir_dend, 'dend_', i, '.eps'), width=15, height=15)
   par(mar=c(ncol(e)+30, 4, 4, 7), xpd=NA)
   
   plot(dend)
-  # plot(hang.dendrogram(dend))
   usr <- par('usr')
   xrng <- diff(usr[1:2])
   yrng <- diff(usr[3:4])
