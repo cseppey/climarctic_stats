@@ -306,7 +306,9 @@ for(h in pairs){
     load(file)
   } else {
     system.time(for (sp1 in colnames(indata_1)){
-      print(sp1)
+      
+      print(c(hc,sp1, which(colnames(indata_1) == sp1)/ncol(indata_1)))
+      
       for (sp2 in colnames(indata_2)){
         #spearman
         cor_out<-cor.test(data_comb[,sp1], data_comb[,sp2], method="spearman") 
@@ -344,29 +346,27 @@ for(h in pairs){
   p_matrxkld <- arr_cor[,,'p_matrxkld']
   p_matrix <- arr_cor[,,'p_matrix']
   
-  #correct p-values and remove new non-significants (Benjamini-hochberg)
-  netmatrix2<-netmatrix
-  pvalsadj2<-p.adjust(unlist(p_matrxkld), 'BH')   
-  pvalsadj2<-matrix(nrow=nrow(p_matrxkld), ncol=ncol(p_matrxkld), data=pvalsadj2)
-  for(i in 1:nrow(pvalsadj2)){
-    for(j in 1: ncol(pvalsadj2)){
-      if(pvalsadj2[i,j]>0.05){
-        netmatrix2[i,j]<-as.numeric(0)
-      }
-    }
-  }
-  
-  pvalsadj2<-p.adjust(unlist(p_matrix), 'BH')   
-  pvalsadj2<-matrix(nrow=nrow(p_matrix), ncol=ncol(p_matrix), data=pvalsadj2)
-  for(i in 1:nrow(pvalsadj2)){
-    for(j in 1: ncol(pvalsadj2)){
-      if(pvalsadj2[i,j]>0.05){
-        netmatrix2[i,j]<-as.numeric(0)
-      }
-    }
-  }
-  
-  arr_cor <- abind(arr_cor, netmatrix2=netmatrix2, along=3)
+  # #correct p-values and remove new non-significants (Benjamini-hochberg)
+  # netmatrix2<-netmatrix
+  # pvalsadj2<-p.adjust(unlist(p_matrxkld), 'BH')
+  # pvalsadj2<-matrix(nrow=nrow(p_matrxkld), ncol=ncol(p_matrxkld), data=pvalsadj2)
+  # for(i in 1:nrow(pvalsadj2)){
+  #   for(j in 1: ncol(pvalsadj2)){
+  #     if(pvalsadj2[i,j]>0.05){
+  #       netmatrix2[i,j]<-as.numeric(0)
+  #     }
+  #   }
+  # }
+  # 
+  # pvalsadj2<-p.adjust(unlist(p_matrix), 'BH')   
+  # pvalsadj2<-matrix(nrow=nrow(p_matrix), ncol=ncol(p_matrix), data=pvalsadj2)
+  # for(i in 1:nrow(pvalsadj2)){
+  #   for(j in 1: ncol(pvalsadj2)){
+  #     if(pvalsadj2[i,j]>0.05){
+  #       netmatrix2[i,j]<-as.numeric(0)
+  #     }
+  #   }
+  # }
   
   #polarfungi3_Network_ITS18S_uparseAll.csv
   #polarfungi3_Network_ITS18S_uparseAntarctica.csv
@@ -386,10 +386,17 @@ for(h in pairs){
   # 
   # netmatrix_parse<-netmatrix_parse[,colSums(netmatrix_parse)>0]
   # netmatrix_parse<-netmatrix_parse[rowSums(netmatrix_parse)>0,]
+  # 
+  # netmatrix_parse <- ifelse(netmatrix2 > 0.6, 1, 0)
+  # netmatrix_parse <- netmatrix_parse[rowSums(netmatrix_parse) != 0, colSums(netmatrix_parse) != 0]
+
+  pv_adj_kdl   <- matrix(nrow=nrow(p_matrxkld), ncol=ncol(p_matrxkld), data=p.adjust(unlist(p_matrxkld), 'BH'))
+  pv_adj_spear <- matrix(nrow=nrow(p_matrix),   ncol=ncol(p_matrix),   data=p.adjust(unlist(p_matrix),   'BH'))
   
-  netmatrix_parse <- ifelse(netmatrix2 > 0.6, 1, 0)
-  netmatrix_parse <- netmatrix_parse[rowSums(netmatrix_parse) != 0, colSums(netmatrix_parse) != 0]
+  netmatrix_parse0 <- ifelse(netmatrix > 0.6 & pv_adj_kdl <= 0.05 & pv_adj_spear <= 0.05, netmatrix, 0)
+  netmatrix_parse0 <- netmatrix_parse0[rowSums(netmatrix_parse0) != 0,colSums(netmatrix_parse0) != 0]
   
+    
   # #square up matrix
   # m1<-matrix(ncol=ncol(netmatrix_parse), nrow=ncol(netmatrix_parse), data=0, 
   #            dimnames = list(c(colnames(netmatrix_parse)), c(colnames(netmatrix_parse))))
@@ -406,7 +413,7 @@ for(h in pairs){
   # # g <- graph.adjacency(as.matrix(netmatrix_parse),mode="undirected",weighted=NULL)
   
   #---
-  g <- graph.incidence(netmatrix_parse)
+  g <- graph.incidence(netmatrix_parse0)
   
   #---  
   vdf <- get.data.frame(g, 'vertices')
@@ -418,19 +425,32 @@ for(h in pairs){
                              root=switch(hc[1],
                                          '01_16S_bact' = 'Bacteria',
                                          '02_18S_euk'  = 'Eukaryota',
-                                         '05_ITS_fun'  = 'Fungi')),
+                                         'Metazoa' = 'Metazoa',
+                                         'Embryophyceae' = 'Embryophyceae_XX'),
+                             tax_lev=switch(hc[1],
+                                            "01_16S_bact" = 2:5,
+                                            "02_18S_euk" = 2:5,
+                                            "Metazoa" = 3:6,
+                                            "Embryophyceae" = 6:8)),
                   hc2 = list(pal=colorRampPalette(c('cyan','yellow','magenta')),
                              relabu=mr_2_relabu,
                              root=switch(hc[2],
                                          '02_18S_euk' = 'Eukaryota',
-                                         '05_ITS_fun' = 'Fungi',
-                                         '08_16S_cyano' = 'Cyanobacteria')))
+                                         'Metazoa' = 'Metazoa',
+                                         'Embryophyceae' = 'Embryophyceae_XX',
+                                         '05_ITS_fun' = 'Fungi'),
+                             tax_lev=switch(hc[2],
+                                            "02_18S_euk" = 2:5,
+                                            "Metazoa" = 3:6,
+                                            "Embryophyceae" = 6:8,
+                                            "05_ITS_fun" = 2:5)))
   
   pal <- NULL
-  tax_lev <- 2:5
   for(i in seq_along(lst_pie)){
+    tax_lev <- lst_pie[[i]][['tax_lev']] 
+      
     taxo <- lst_comm[[hc[i]]]$nls$taxo
-    taxo <- lst_pie[[i]][['taxo']] <- taxo[row.names(taxo) %in% unlist(dimnames(netmatrix_parse)),]
+    taxo <- lst_pie[[i]][['taxo']] <- taxo[row.names(taxo) %in% unlist(dimnames(netmatrix_parse0)),]
     
     mr <- lst_pie[[i]]$relabu[,row.names(taxo)]
     
@@ -448,8 +468,16 @@ for(h in pairs){
     lst_pie[[i]][['pie']] <- pie
   }
   
-  tax_tot <- lapply(lst_pie, function(x) x$taxo[,tax_lev])
-  names(tax_tot[[1]]) <- names(tax_tot[[2]]) <- paste0('tax', seq_along(tax_lev))
+  tax_tot <- lapply(lst_pie, function(x) x$taxo[,x$tax_lev])
+  nc <- sapply(tax_tot, ncol)
+  if(identical(as.numeric(nc[1]),as.numeric(nc[2])) == F){
+    min <- which(nc == min(nc))
+    while(ncol(tax_tot[[min]]) != nc[names(nc) != names(min)]){
+      tax_tot[[min]] <- cbind.data.frame(tax=rep(NA, nrow(tax_tot[[min]])), tax_tot[[min]])
+    }
+  }
+  
+  names(tax_tot[[1]]) <- names(tax_tot[[2]]) <- paste0('tax', seq_along(tax_tot[[1]]))
   tax_tot <- rbind(tax_tot[[1]], tax_tot[[2]])
   tax_tot <- tax_tot[vdf$name,]
   
@@ -488,39 +516,49 @@ for(h in pairs){
   # row.names(coord) <- coord$V2
   # coord <- coord[V(g)$name,]
   
-  V(g)$label <- paste(row.names(tax_tot),tax_tot$nb)
-  
+  V(g)$label <- paste(row.names(tax_tot), tax_tot$nb)
   
   #---
   wdt <- 15
-  hei <- 0.2*max(dim(netmatrix_parse)) + 2
+  hei <- 0.2*max(dim(netmatrix_parse0)) + 2
   
-  # cairo_ps(paste(dir_cooc, 'network_ITS_18S.eps'), width=12, height=8)
-  pdf(paste0(dir_cooc, 'network_', paste(hc, collapse='_'), '.pdf'), width=wdt, height=hei)
-  layout(matrix(c(1,2, 1,3), nrow=2, byrow=T), width=c(1.5,1))
-  par(mai=rep(1,4), xpd=NA)
+  # pdf(paste0(dir_cooc, 'network_', paste(hc, collapse='_'), '.pdf'), width=wdt, height=hei)
+  svg(paste0(dir_cooc, 'network_', paste(hc, collapse='_'), '.svg'), width=wdt, height=hei)
+  layout(matrix(c(1,2, 1,3, 1,4), ncol=2, byrow=T), width=c(1.5,1))
+  par(mai=c(1,3,1,3), xpd=NA)
   
   coord <- layout_as_bipartite(g)
   tax_tot <- data.frame(tax_tot, x=coord[,2], y=coord[,1])
   
-  #---  
-  plot(tax_tot$x, tax_tot$y, axes=F, type='n', xlab='', ylab='')
+  edge_wdt <- t(netmatrix_parse0)[t(netmatrix_parse0) != 0]
+  edge_wdt_sc <- (edge_wdt-0.6)
+  edge_wdt_sc <- edge_wdt_sc/(max(edge_wdt_sc)/max(edge_wdt))*5 + 0.1
+  range(edge_wdt_sc)
   
+  col_seg <- rgb(0.5,0.5,0.5,0.5)
+  
+  #---  
+  plot(tax_tot$x, tax_tot$y, axes=F, type='n', xlab='', ylab='', yaxs='i')
+ 
   seg <- sapply(edf, function(x) sapply(x, function(y) tax_tot[y,'y']))
-  is_lic <- rownames(tax_tot)[apply(tax_tot[,1:4], 1, function(x) any(grepl('Synechococcophycideae|Oscillatoriophycideae|Cyanobacteria|Basidiomycota|Ascomycota|Chlorophyta', x)))]
-  col <- ifelse(apply(edf, 1, function(x) all(x %in% is_lic)), 2, 'grey80')
-  segments(0,seg[,2],1,seg[,1], col=col)
+  segments(0,seg[,2],1,seg[,1], lwd=edge_wdt_sc, col=col_seg)
   
   points(tax_tot$x, tax_tot$y, pch=19, col=as.character(tax_tot$col))
   for(i in 0:1){
     ind <- tax_tot$x == i
-    text(tax_tot$x[ind], tax_tot$y[ind], labels=paste(row.names(tax_tot), tax_tot$nb)[ind], pos=c(2,4)[i+1])
+    text(tax_tot$x[ind], tax_tot$y[ind], labels=paste(row.names(tax_tot), tax_tot$nb,
+                                                      tax_tot[[rev(grep('tax',names(tax_tot)))[1]]])[ind], pos=c(2,4)[i+1])
   }
   
   #---
-  for(i in names(lst_pie)){
+  par(mar=rep(0,4))
+  for(i in c(names(lst_pie)[1], 'lwd', names(lst_pie)[2])){
     plot.new()
-    legend_pie_taxo(lst_pie[[i]]$pie, 0.5,0.5, cex=0.75, last_tax_text=F)
+    if(i != 'lwd'){
+      legend_pie_taxo(lst_pie[[i]]$pie, 0.5,0.5, cex=0.75, last_tax_text=F)
+    } else {
+      legend(0.5, 0.5, seq(0.6,1,length.out=5), lwd=seq(0.1,5.1,length.out=5), col=col_seg, xjust=0.5, yjust=0.5, bty='n')  
+    }
   }
   
   dev.off()

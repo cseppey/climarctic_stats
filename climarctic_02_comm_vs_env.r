@@ -8,13 +8,10 @@ rm(list=ls())
 
 require(foreach)
 require(doSNOW) # e.g. makeSOCKcluster()
+require(xtable)
 
 # prep cluster
-# cl <- makeSOCKcluster(2)
 cl <- makeSOCKcluster(4)
-
-# clusterEvalQ(cl, library(foreach))
-# clusterEvalQ(cl, library(doSNOW))
 
 registerDoSNOW(cl)
 
@@ -34,7 +31,7 @@ load(file)
 permu <- 10000
 #########
 
-# ordinations
+# ordinations ####
 file_out <- paste0(dir_save, '02_lst_rda.Rdata')
 if(file.exists(file_out)){
   load(file_out)
@@ -78,7 +75,6 @@ if(file.exists(file_out)){
       lst_rda <- list(full=list(e=e, m=m, f=f, mod=rda_full))
       
       # retreive a more parsimonious model ---
-      
       # Note: the parsimonious model did not depend of the order of the variable in the input model
       
       print('ordistep on full model')
@@ -155,12 +151,10 @@ if(file.exists(file_out)){
                 set.seed(0)
                 
                 upd <- update(mod, as.formula(paste('.~.-', k)))
-                # pv1 <- signif(anova(mod, upd, parallel=4, permutations=permu)$`Pr(>F)`[2], 2)
                 pv1 <- signif(anova(mod, upd, permutations=permu)$`Pr(>F)`[2], 2)
                 va1 <- RsquareAdj(mod)[[1]] - RsquareAdj(upd)[[1]] # no R2 adj because Conditon(site)
                 
                 rda1 <- capscale(as.formula(paste('m~', k, '+Condition(', cond, ')')), data=e, scale=T)
-                # pv2 <- signif(anova(rda1, parallel=4, permutations=permu)$`Pr(>F)`[1], 2)
                 pv2 <- signif(anova(rda1, permutations=permu)$`Pr(>F)`[1], 2)
                 va2 <- RsquareAdj(rda1)[[1]]
                 
@@ -234,15 +228,9 @@ if(file.exists(file_out)){
 
         j <- lst_ordi[[jn]]
 
-        cairo_ps(paste0(dir_cve, 'ordination_', jn, '_', i, '_', h, '.eps'), width=10, height=7)
-        lay()
-
-        # axes
-        par(mar=rep(0,4), oma=c(1,1,3,3))
-        for(k in 2:1){
-          plot.new()
-          text(0.5,0.5, labels=j$axes_names[k], srt=ifelse(k == 1, 0, 90))
-        }
+        # cairo_ps(paste0(dir_cve, 'ordination_', jn, '_', i, '_', h, '.eps'), width=10, height=7)
+        svg(paste0(dir_cve, 'ordination_', jn, '_', i, '_', h, '.svg'), width=10, height=7)
+        lay(j$axes_names)
 
         # ordinations
         smp <- j$site
@@ -336,100 +324,81 @@ for(i in names(out_rda)){
   }
 }
 
+# xtable
+lapply(out_rda, function(x) {
+  xtable(cbind.data.frame(lapply(x, function(y) {
+    m <- y$lst_ordi$parsi$stat[,1:2]
+    out <- NULL
+    v <- c('rh','depth','pH','om','C','N','S','C_N','clay','silt')
+    for(i in v){
+      if(i %in% row.names(m)){
+        o <- m[i,]
+      } else {
+        o <- c(NA,NA)
+      }
+      out <- rbind(out, o)
+    }
+    row.names(out) <- v
+    return(out)
+  })), digit=3)
+})
+
 # procrust rotation on the NMDS with common samples ####
 print("Procrust")
 
-# find the samples found in all datasets
-smp_4 <- names(which(table(unlist(lapply(lst_comm, function(x) row.names(x$clr_nls$mr)))) == 4))
+cmbn <- combn(names(lst_comm), 2)
 
-# NMDS ---
-lst_nmds_4 <- lapply(lst_comm, function(x) {
-  m <- x$clr_nls$mr[smp_4,]
-  m <- m[,colSums(m) != 0]
-  return(metaMDS(m, distance='euc'))
+#---
+# cairo_ps(paste0(dir_cve, 'procrust.eps'), 10, 14)
+svg(paste0(dir_cve, 'procrust.svg'), 10, 14)
+par(mfrow=c(4,3))
+
+pvs <- apply(cmbn, 2, function(x){
+  
+  print(x)
+  
+  lst <- list(comm1=list(mr=lst_comm[[x[1]]]$clr_nls$mr),
+              comm2=list(mr=lst_comm[[x[2]]]$clr_nls$mr))
+  
+  # get the common samples
+  smps <- intersect(row.names(lst[[1]]$mr),row.names(lst[[2]]$mr))
+  
+  # do the NMDS
+  for(i in seq_along(lst)){
+    print(x[i])
+    mr <- lst[[i]]$mr[smps,]
+    lst[[i]][['nmds']] <- metaMDS(mr, distance='euc', trymax=100, trace=F)
+  }
+  
+  # test the procrustes and plot
+  pt <- protest(lst[[1]]$nmds, lst[[2]]$nmds, scale=T, symmetric=T, score='sites')
+  plot(procrustes(lst[[1]]$nmds, lst[[2]]$nmds, scale=T, symmetric=T, score='sites'),
+       main=paste(c(x, '\np =', pt$signif, 'SS =', signif(pt$ss, 2)), collapse=' '))
+  
+  return(c(pt$signif, pt$ss))
+  
 })
 
-# grafs
-for(i in n_comm){
-  
-  # pdf(paste0(dir_cve, 'nmds_4_', i, '.pdf'), width=10, height=7)
-  cairo_ps(paste0(dir_cve, 'nmds_4_', i, '.eps'), width=10, height=7)
-  layout(matrix(c(1,3,4, 1,5,6, 0,2,2), nrow=3, byrow=T), width=c(0.2,1,1), height=c(1,1,0.3))
-  
-  # axes
-  par(mar=rep(0,4), oma=c(1,1,3,3))
-  for(j in 2:1){
-    plot.new()
-    text(0.5,0.5, labels=paste0('NMDS', j), srt=ifelse(j == 1, 0, 90))
-  }
-  
-  # ordinations
-  site <- lst_nmds_4[[i]]$points
-  
-  for(j in seq_along(fact_3)){
-    
-    fact <- fact_3[j]
-    
-    env_in_ordi <- env_tot[row.names(env_tot) %in% row.names(site),]
-    
-    pal <- lst_palev[[fact]][env_in_ordi[[fact]]]
-    
-    #---
-    plot(site, xlim=range(site[,1]), ylim=range(site[,2]), xaxt='n', yaxt='n',
-         col=pal, pch=NA)
-    
-    if(j > 1){
-      axis(1)
-    }
-    
-    if(j %% 2 == 1){
-      axis(2)
-    }
-    
-    ordispider(site, env_in_ordi$plot_in_moist_in_site, col='grey80')
-    
-    points(site[,1], site[,2], pch=19, col=pal)
-    # text(site, labels=row.names(site), col=pal)
-    
-    abline(v=0, h=0, lty=3)
-    
-  }
-  
-  # legend ---
-  plot.new()
-  
-  text(0.5,0.75,i)
-  
-  # factors colors
-  legend(0.5,0.5, legend=sapply(strsplit(names(unlist(lst_palev)), '.', fixed=T), '[[', 2),
-         bty='n', xjust=0.5, yjust=0.5, pch=19, col=unlist(lst_palev))
-  
-  dev.off()
-  
-}
-
-# procrustes ---
-lgt <- length(lst_nmds_4)
-
-pvs <- matrix(NA, lgt, lgt, dimnames=list(names(lst_nmds_4),names(lst_nmds_4)))
-
-cairo_ps(paste0(dir_cve, 'procrust.eps'), 11, 8)
-par(mfrow=c(2,3))
-
-set.seed(0)
-for(i in 1:(lgt-1)){
-  for(j in (i+1):lgt){
-    pt <- protest(lst_nmds_4[[i]]$points,lst_nmds_4[[j]]$points)
-    plot(procrustes(lst_nmds_4[[i]]$points,lst_nmds_4[[j]]$points),
-         main=paste(c(names(lst_comm)[c(i,j)], '\np =', pt$signif, 'SS =', signif(pt$ss, 2)), collapse=' '))
-    pvs[i,j] <- pt$signif
-    pvs[j,i] <- pt$ss
-  }
-}
+dimnames(pvs) <- list(c('pvs','ss'), apply(cmbn, 2, function(x) paste(x, collapse=':')))
 
 dev.off()
 
+# write table of pvs
 
+pvs_new <- matrix(NA, nrow=length(n_comm), ncol=length(n_comm), dimnames=list(n_comm, n_comm))
+
+for(i in 4:1){
+  rng <- rev(rev(cumsum(4:i))[1:2])+c(1,0)
+  rng <- ifelse(is.na(rng), 1, rng)
+  
+  seq <- rng[1]:rng[2]
+  seq1 <- (1:i)+(5-i)
+  
+  pvs_new[(5-i),seq1] <- pvs[1,seq]
+  pvs_new[seq1,(5-i)] <- pvs[2,seq]
+}
+
+xtable(pvs_new, digit=3)
 
 
 

@@ -11,7 +11,9 @@ require(foreach)
 require(doSNOW) # e.g. makeSOCKcluster()
 require(abind)
 require(fossil)
+require(MuMIn)
 require(lme4)
+require(lmerTest)
 
 # dir loads ####
 dir_in <- 'Projets/Climarctic/stats/MBC/in/'
@@ -23,29 +25,11 @@ dir.create(dir_div, showWarnings=F, recursive=T)
 file <- paste0(dir_save, '00_lst_comm.Rdata')
 load(file)
 
-# gamma ---
-#   specpool$chao
-#   whole dataset
-#   per site*moisture*depth
-
-## from cluster
-# lst_sp <- NULL
-# for(i in n_comm){
-#   lst_sp[[i]] <- specpool(lst_comm[[i]]$nls$mr) 
-# }
-# 
-# write.tavle(t(sapply(lst_co, function(x) x)), 05_sp_csv, F, F, '\t')
-
-specpool <- read.table(paste0(dir_div, 'from_cluster/05_sp.csv'))
-
-# per sample to compare to the rh
-#   alpha = chao
-#   beta = gamma_whole_dataset/alpha
-# per site*moisture*depth to know where is alpha and beta the highest
-#   alpha = distro of alpha per smd
-#   beta = gamma_smd / alpha
-
+#---
+lst_pvs_div <- NULL
 for(i in n_comm){
+  
+  print(i)
   
   env <- lst_comm[[i]]$nls$env
   
@@ -64,181 +48,143 @@ for(i in n_comm){
   lm <- lev_fac$moisture
   
   # whole dataset vs rh ----
-  # gamma 
-  # (from cluster for the whole community)
-  
-  gamma <- specpool[i,'chao']
   
   # alpha
-  # alpha <- diversity(mr)
   alpha <- apply(mr, 1, function(x) chao1(x))
   
-  # correct according to the number of sequence and set between 0 and 1
+  # correct according to the number of sequence
   log_nb_seq <- log(rowSums(mr))
   lm <- lm(alpha~log_nb_seq)
   alpha_r <- residuals(lm)
   
-  alpha_r <- alpha_r-min(alpha_r)
-  alpha_r <- alpha_r/max(alpha_r)
-
-  # beta
-  beta <- gamma/alpha_r
+  env <- cbind.data.frame(env, alpha_r)
   
-  df_div <- data.frame(alpha=alpha_r, beta=beta)
+  print(table(env$site, env$depth))
   
-  # models ----
-  for(j in names(df_div)){
-    
-    metric <- df_div[[j]]
-  
-    # # linear mixed effect model (https://www.r-bloggers.com/linear-mixed-effect-models-in-r/)
-    # 
-    # # OPTIMAL RANDOM STRUCTURE
-    # lst_mod <- list( glm = gls(metric ~ rh,                              data=env, method = "ML"),
-    #                 lmm1 = lme(metric ~ rh, random = ~1|site           , data=env, method = "ML"),
-    #                 lmm2 = lme(metric ~ rh, random = ~1|moisture       , data=env, method = "ML"),
-    #                 lmm3 = lme(metric ~ rh, random = ~1|depth          , data=env, method = "ML"),
-    #                 lmm4 = lme(metric ~ rh, random = ~1|combi          , data=env, method = "ML"),
-    #                 lmm5 = lme(metric ~ rh, random = ~1|site/MiS       , data=env, method = "ML"),
-    #                 lmm6 = lme(metric ~ rh, random = ~1|MiS/PiMiS      , data=env, method = "ML"),
-    #                 lmm7 = lme(metric ~ rh, random = ~1|site/MiS/PiMiS , data=env, method = "ML"))
-    # 
-    # anova(lst_mod[[1]], lst_mod[[2]], lst_mod[[3]], lst_mod[[4]],
-    #       lst_mod[[5]], lst_mod[[6]], lst_mod[[7]], lst_mod[[8]])
-    # sapply(lst_mod, function(x) shapiro.test(resid(x))$p.value)
-    # 
-
-    
-    # vs rh linear----
-    cairo_ps(paste0(dir_div, 'lm_poly1_', i, '_', j, '.eps'), 11, 8)
-    par(mfrow=c(2,2))
-    for(k in c('site','moisture','depth')){
-      
-      plot(metric~rh, ylab=j, pch=19, col=lst_palev[[k]][env[[k]]])
-      
-      # overall
-      lm <- lm(metric~rh, data=env)
-      
-      pvs <- anova(lm)$`Pr(>F)`
-      norm <- shapiro.test(resid(lm))$p.value
-      
-      abline(coef(lm))
-      
-      # no interac
-      formu <- formula(paste('metric~rh+', k))
-      lm <- lm(formu, data=env)
-      
-      pvs <- c(pvs, anova(lm)$`Pr(>F)`)
-      norm <- c(norm, shapiro.test(resid(lm))$p.value)
-      
-      cf <- coef(lm)
-      
-      for(l in seq_along(lev_fac[[k]])){
-        if(l == 1){
-          abline(cf[1], cf[2], col=lst_palev[[k]][l], lty=2)
-        } else {
-          abline(cf[1]+cf[1+l], cf[2], col=lst_palev[[k]][l], lty=2)
-        }
-      }
-      
-      # with interac
-      formu <- formula(paste('metric~rh*', k))
-      lm <- lm(formu, data=env)
-      
-      pvs <- c(pvs,anova(lm)$`Pr(>F)`)
-      norm <- c(norm, shapiro.test(resid(lm))$p.value)
-      
-      cf <- coef(lm)
-      
-      for(l in seq_along(lev_fac[[k]])){
-        if(l == 1){
-          abline(cf[1], cf[2], col=lst_palev[[k]][l], lty=3)
-        } else {
-          abline(cf[1]+cf[1+l], cf[2]+cf[length(lev_fac[[k]])+l], col=lst_palev[[k]][l], lty=3)
-        }
-      }
-      
-      # pvs
-      pvs <- round(na.omit(pvs),2)
-      norm <- round(norm,2)
-      mtext(paste0('overall: P rh=', pvs[1], ', norm:', norm[1],
-                   '\n+fact: P rh=', pvs[2], ' fact=', pvs[3], ', norm:', norm[2],
-                  '\n*fact: P rh=',  pvs[4], ' fact=', pvs[5], ' inter=', pvs[6], ', norm=', norm[3]), line=0.5, cex=0.75)
+  plot(alpha_r~rh, pch=c(15,16)[env$site], col=lst_palev$depth[env$depth])
+  for(d  in c('top','deep')){
+    for(s in c('Knudsenheia','Ossian')){
+      lm <- lm(alpha_r~rh, data=env[env$depth == d & env$site == s,])
+      abline(coef(lm), col=lst_palev$depth[[d]], lty=ifelse(s == 'Knudsenheia', 2, 3))
+      print(anova(lm))
     }
-    leg(i)
+  }
+  
+  # linear mixed effect model (nlme: https://www.r-bloggers.com/linear-mixed-effect-models-in-r/)
+  # interesting site on mixed effect models (lme4: http://bbolker.github.io/mixedmodels-misc/glmmFAQ.html#model-definition)
+  
+  for(j in c('top|deep','top','deep')){
+    e <- env[grep(j, env$depth),]
+    
+    lst_lm <- NULL
+    
+    f0 <- formula(alpha_r~rh)
+    lst_lm[['lm0']] <- lm0 <- lm(f0, data=e)
+    
+    lst_lm[['lms']] <- lms <- lm(alpha_r~rh*site, data=e)
+    
+    if(j == 'top|deep'){
+      f1 <- update(f0, ~. * depth)
+      lst_lm[['lmd']] <- lmd <- lm(f1, data=e)
+    } else {
+      f1 <- f0
+    }
+  
+    ff1 <- update(f1, ~.+(rh|site))
+    lst_lm[['lme1']] <- lme1 <- lmer(ff1, data=e)
+    
+    # test
+    
+    lst_pvs_div[[i]][[j]] <- pvs <- lapply(lst_lm, function(x) {
+      a <- anova(x)
+      p <- a$'Pr(>F)'
+      names(p) <- row.names(a)
+      return(c(p[is.na(p) == F], norm=shapiro.test(resid(x))$p.value))
+    })
+    
+    title <- sapply(pvs, function(x) paste(names(x), round(x, 3), collapse=', '))
+    #
     
     #---
-    dev.off()
+    # cairo_ps(paste0(dir_div, 'lm_poly1_', i, '_', j, '.eps'), width=10, height=7)
+    svg(paste0(dir_div, 'lm_poly1_', i, '_', j, '.svg'), width=10, height=7)
+    lay(5, c('rh','residual of\nlm(Chao~log(seq nb)'), lab_crd=list(x=c(0.5, 0.33), y=c(0.33,0.5)))
     
-    # vs rh poly2
-    cairo_ps(paste0(dir_div, 'lm_poly2_', i, '_', j, '.eps'), 11, 8)
-    par(mfrow=c(2,2))
-    for(k in c('site','moisture','depth')){
+    for(k in 1:3){
+      plot(alpha_r~rh, data=e, pch=c(15,16)[e$site], yaxt=ifelse(k == 2, 'n', 's'),col=lst_palev$depth[e$depth])
+    
+      cm <- 0.8
+      ln <- 1
       
-      lf <- length(lev_fac[[k]])
+      abline(coef(lm0))
       
-      plot(metric~rh, ylab=j, pch=19, col=lst_palev[[k]][env[[k]]])
-      
-      pred_x <- seq(min(rh), max(rh), length.out=100)
-      
-      # overall
-      lm <- lm(metric~poly(rh, 2, raw=T), data=env)
-      pvs <- anova(lm)$`Pr(>F)`
-      
-      cf <- coef(lm)
-      pred_y <- cf[1] + cf[2]*pred_x + cf[3]*pred_x^2
-      lines(pred_y~pred_x)
-      
-      # no interac
-      formu <- formula(paste('metric~poly(rh,2,raw=T)+', k))
-      lm <- lm(formu, data=env)
-      
-      pvs <- c(pvs, anova(lm)$`Pr(>F)`)
-      
-      cf <- coef(lm)
-      
-      for(l in seq_along(lev_fac[[k]])){
-        if(l == 1){
-          pred_y <- cf[1] + cf[2]*pred_x + cf[3]*pred_x^2
+      # vs depth
+      if(k == 1){
+        if(j == 'top|deep'){
+          title(paste(title[c('lm0','lmd')], collapse='\n'), cex.main=cm, line=ln)
+          
+          abline(coef(lmd)[1:2], col=lst_palev$depth[1])
+          abline(sum(coef(lmd)[c(1,3)]), sum(coef(lmd)[c(2,4)]), col=lst_palev$depth[2])
         } else {
-          pred_y <- cf[1]+cf[2+l] + cf[2]*pred_x + cf[3]*pred_x^2
+          title(title['lm0'], cex.main=cm, line=ln)
         }
-        lines(pred_y~pred_x, col=lst_palev[[k]][l], lty=2)
       }
       
-      # with interac
-      formu <- formula(paste('metric~poly(rh, 2, raw=T)*', k))
-      lm <- lm(formu, data=env)
-      
-      pvs <- c(pvs,anova(lm)$`Pr(>F)`)
-      
-      cf <- coef(lm)
-      
-      for(l in seq_along(lev_fac[[k]])){
-        if(l == 1){
-          pred_y <- cf[1] + cf[2]*pred_x + cf[3]*pred_x^2
-        } else {
-          pred_y <- cf[1]+cf[2+l] + 
-            (cf[2]+cf[3 + (lf-1) + 2*(l-1)-1])*pred_x +
-            (cf[3]+cf[3 + (lf-1) + 2*(l-1)])*pred_x^2
-        }
-        lines(pred_y~pred_x, col=lst_palev[[k]][l], lty=3)
-      }
+      # vs site
+      if(k == 2){
+        title(paste(title[c('lm0','lms')], collapse='\n'), cex.main=cm, line=ln)
         
-      # pvs
-      pvs <- round(na.omit(pvs),2)
-      mtext(paste('overall:rh', pvs[1], '\n+fact:rh', pvs[2], 'fact', pvs[3],
-                  '\n*fact:rh', pvs[4], 'fact', pvs[5], 'inter', pvs[6]), line=0.5, cex=0.75)
+        abline(coef(lms)[1:2], lty=2, col=lst_palev$site[1])
+        abline(sum(coef(lms)[c(1,3)]), lty=3, sum(coef(lms)[c(2,4)]), col=lst_palev$site[2])
+      }
+      
+      # lme
+      if(k == 3){
+        title(paste(title[c('lm0','lme1')], collapse='\n'), cex.main=cm, line=ln)
+        
+        cfme <- as.matrix(coef(lme1)$site)
+        for(k in 1:2){
+          if(j == 'top|deep'){
+            abline(cfme[k,1:2], lty=k+1, col=lst_palev$depth[1])
+            abline(sum(cfme[k,c(1,3)]), sum(cfme[k,c(2,4)]), lty=k+1, col=lst_palev$depth[2])
+          } else {
+            abline(cfme[k,], lty=k+1, col=lst_palev$depth[[j]])
+          }
+        }
+      }
     }
-    leg(i)
+    
+    leg(title=i, lay='mixed', bg=unlist(lst_palev), lty=c(2,3,rep(0,5)))
     
     #---
     dev.off()
     
   }
   
+  
 }
 
+#---
+lapply(lst_pvs_div, function(x){
+  lapply(x, function(y) {
+    sapply(y, function(z) {
+      gds <- grepl('depth|site', names(z)) 
+      grh <- grepl('rh', names(z))
+      
+      p1 <- z[1]
+      
+      p2 <- z[gds & grh == F]
+      p2 <- ifelse(length(p2), p2, NA)
+      
+      p3 <- z[gds & grh]
+      p3 <- ifelse(length(p3), p3, NA)
+      
+      p4 <- z[names(z) == 'norm']
+      
+      return(c(p1, p2, p3, p4))
+    })
+  })
+}) 
 
 
 

@@ -61,7 +61,7 @@ for(i in n_comm) {
   dend <- rotate(dend, row.names(env)[order(env$rh)])
   
   # heatmap variables ---
-  pal_var <- colorRampPalette(c('red','green'))(101)
+  pal_var <- colorRampPalette(c('blue','yellow'))(101)
   
   var <- rev(attributes(out_rda$`top|deep`[[i]]$lst_rda$parsi$mod$terminfo$terms)$term.labels)
   
@@ -91,7 +91,8 @@ for(i in n_comm) {
   pal_tax <- lst_pie[[i]]$abundance$per_smp$lst_pal[[ifelse(i == '02_18S_euk', 2, 1)]]
   
   # plot ---  
-  cairo_ps(paste0(dir_dend, 'dend_', i, '.eps'), width=15, height=15)
+  # cairo_ps(paste0(dir_dend, 'dend_', i, '.eps'), width=15, height=15)
+  svg(paste0(dir_dend, 'dend_', i, '.svg'), width=15, height=15)
   par(mar=c(ncol(e)+30, 4, 4, 7), xpd=NA)
   
   plot(dend)
@@ -100,6 +101,9 @@ for(i in n_comm) {
   yrng <- diff(usr[3:4])
   
   points(1:nrow(e), rep(0, nrow(e)), pch=19, col=lst_palev$moisture[env[labels(dend),fact2]])
+  
+  # factor legend
+  leg(usr[2] + xrng*0.05, usr[3] + yrng*0.5, add=T)
   
   # variable
   x0 <- 1:ncol(comm)

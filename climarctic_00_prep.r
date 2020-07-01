@@ -11,8 +11,6 @@ require(doSNOW) # e.g. makeSOCKcluster()
 require(RColorBrewer) # brewer.pal 
 require(zCompositions)
 
-source('~/bin/src/my_prog/R/rarecurveMPI.r')
-
 # prep cluster
 cl <- makeSOCKcluster(4)
 
@@ -75,11 +73,11 @@ lev_site <- levels(env_tot$site)
 lev_mois <- levels(env_tot$moisture)
 lev_dept <- levels(env_tot$depth)
 
-pal_dark2 <- brewer.pal(8, 'Dark2')
-lst_palev <- list(site    =pal_dark2[1:2],# lev=lev_site,
-                  moisture=pal_dark2[3:5],# lev=lev_mois,
-                  depth   =pal_dark2[6:7]#, lev=lev_dept
-)
+pal_dark2 <- brewer.pal(8, 'Set1')[-6]
+lst_palev <- list(site    =pal_dark2[1:2],
+                  moisture=pal_dark2[3:5],
+                  depth   =pal_dark2[6:7])
+
 names(lst_palev$site) <- lev_site
 names(lst_palev$moisture) <- lev_mois
 names(lst_palev$depth) <- lev_dept
@@ -88,121 +86,186 @@ names(lst_palev$depth) <- lev_dept
 fact_3 <- c('site','moisture','depth')
 
 # legend function
-leg <- function(x = NULL){
-  plot.new()
+leg <- function(x = 0.5, y = 0.5, lay = 'reg', add = F, title=NULL, 
+                pch=NULL, col=NULL, bg=NULL, lty=NULL){
+  if(add == F){
+    plot.new()
+    x <- 0.5
+    y <- 0.5
+  }
   
-  text(0.5,0.85,x)
+  if(lay == 'short'){
+    pchl <- c(22,21, rep(21,3), 21,21)
+    coll <- c(1,1, rep(0,3), 1,1)
+    bgl  <- c(1,1, lst_palev$moisture, 1,0)
+  } else if(lay == 'mixed'){
+    pchl <- c(22,21, rep(21,3), 21,21)
+    coll <- c(lst_palev$site, rep(0,3), lst_palev$depth)
+    bgl  <- c(unlist(lst_palev)[-7], 'white')
+  } else {
+    pchl <- 19
+    coll <- unlist(lst_palev)
+    bgl <- coll
+  }
   
-  # factors colors
-  legend(0.5,0.5, legend=sapply(strsplit(names(unlist(lst_palev)), '.', fixed=T), '[[', 2),
-         bty='n', xjust=0.5, yjust=0.5, pch=19, col=unlist(lst_palev))
+  if(is.null(pch) == F){
+    pchl <- pch
+  }
+  if(is.null(col) == F){
+    coll <- col
+  }
+  if(is.null(bg) == F){
+    bgl <- bg
+  }
+    
+  legend(x,y, legend=sapply(strsplit(names(unlist(lst_palev)), '.', fixed=T), '[[', 2),
+         bty='n', xjust=0.5, yjust=0.5, pch=pchl, col=coll, pt.bg=bgl, title=title, lty=lty)
 } 
 
 # layout function
-lay <- function() {
+lay <- function(x_sp=0, y_sp=0, labels=NULL, lab_crd=list(x=c(0.5,0.5), y=c(0.5,0.5))) {
   layout(matrix(c(1,3,4, 1,5,6, 0,2,2), nrow=3, byrow=T), width=c(0.2,1,1), height=c(1,1,0.3))
   par(mar=rep(0,4), oma=c(1,1,3,3))
+  
+  for(i in 2:1){
+    plot.new()
+    text(lab_crd$x[i], lab_crd$y[i], labels[i], srt=ifelse(i == 1, 0, 90))
+  }
+  
+  par(mar=c(0,x_sp,y_sp,0))
 }
 
 # PCA ----
+# cairo_ps(paste0(dir_prep, 'PCA_short2.eps'), width=10, height=7)
+svg(paste0(dir_prep, 'PCA_short2.svg'), width=10, height=7)
+lay(x_sp=5, y_sp=5, labels=c('PC1','PC2'))
+
+pch <- c(22,21)[env_tot$site]
 for(i in c('top|deep', 'top', 'deep')){
-  env_sc <- env_tot[grep(i, env_tot$depth),-which(names(env_tot) == 'sand')]
+  ind_depth <- grep(i, env_tot$depth)
+  
+  env_sc <- env_tot[ind_depth,-which(names(env_tot) == 'sand')]
   is.num <- sapply(env_sc, is.numeric)
   env_sc[,is.num] <- scale(env_sc[,is.num])
   env_sc <- na.omit(env_sc)
+
+  pch_sc <- pch[ind_depth]  
   
+  #---
   pca <- rda(env_sc[,is.num])
-  
-  # plot
-  cairo_ps(paste0(dir_prep, 'PCA_', i, '.eps'), width=10, height=7)
-  lay()
-  
-  for(j in 2:1){
-    plot.new()
-    text(0.5,0.5, labels=paste('PCA',j), srt=ifelse(j == 1, 0, 90))
-  }
   
   # ordinations
   smp <- pca$CA$u[,1:2]
   var <- pca$CA$v[,1:2]
+
+  # variables
+  rng_smp <- sapply(as.data.frame(smp), range, simplify='matrix')
+  rng_var <- sapply(as.data.frame(var), range, simplify='matrix')
   
-  for(j in seq_along(fact_3)){
-    
-    fact <- fact_3[j]
-    
-    pal <- lst_palev[[fact]][env_sc[[fact]]]
-    
-    #---
-    plot(smp, xlim=range(smp[,1]), ylim=range(smp[,2]), xaxt='n', yaxt='n',
-         col=pal, pch=NA)
-    
-    abline(v=0, h=0, lty=3)
+  divis <- max(rng_var/rng_smp)
+  v2 <- var/divis
   
-    # variables
-    rng_smp <- sapply(as.data.frame(smp), range, simplify='matrix')
-    rng_var <- sapply(as.data.frame(var), range, simplify='matrix')
-    
-    divis <- max(rng_var/rng_smp)
-    v2 <- var/divis
-    
-    arrows(0,0,v2[,1],v2[,2], length=0, lty=2)
-    
-    if(j < 3){       
-      max_smp <- max(abs(rng_var[,1]/divis))
-      max_var <- max(abs(rng_var[,1]))
-      axis(3, at=seq(-max_smp, max_smp, length.out=9), labels=round(seq(-max_var, max_var, length.out=9), 2), col=2)
-    }
-    
-    if(j > 1){
-      max_smp <- max(abs(rng_var[,2]/divis))
-      max_var <- max(abs(rng_var[,2]))
-      axis(4, at=seq(-max_smp, max_smp, length.out=9), labels=round(seq(-max_var, max_var, length.out=9), 2), col=2)
-    }
-    
-    text(v2[,1:2], labels=paste(row.names(v2)))
-    
-    # samples
-    if(j > 1){
-      axis(1)
-    }
-    
-    if(j %% 2 == 1){
-      axis(2)
-    }
-    
-    ordispider(smp, env_sc$combi, col='grey80')
-    
-    points(smp[,1], smp[,2], pch=19, col=pal)
-    # text(site, labels=row.names(site), col=pal)
-    
-  }
+  max_smp1 <- max(abs(rng_var[,1]/divis))
+  max_var1 <- max(abs(rng_var[,1]))
   
-  # legend ---
-  leg()
+  max_smp2 <- max(abs(rng_var[,2]/divis))
+  max_var2 <- max(abs(rng_var[,2]))
+
+  # plot short layout ---
+  plot.new()
+  plot.window(range(smp[,1]),range(smp[,2]))
+  box('plot')
   
-  dev.off()
+  abline(v=0, h=0, lty=3)
+  
+  # arrow and spiders  
+  arrows(0,0,v2[,1],v2[,2], length=0, lty=2, col='grey60')
+  
+  axis(3, at=seq(-max_smp1, max_smp1, length.out=9), labels=round(seq(-max_var1, max_var1, length.out=9), 2), col=2)
+  
+  axis(4, at=seq(-max_smp2, max_smp2, length.out=9), labels=round(seq(-max_var2, max_var2, length.out=9), 2), col=2)
+  
+  ordispider(smp, env_sc$combi, col='grey80')
+  
+  # variables and samples
+  text(v2[,1:2], labels=paste(row.names(v2)))
+  
+  axis(1)
+  
+  axis(2)
+  
+  points(smp, pch=pch_sc, col=lst_palev$moisture[env_sc$moisture],
+         bg=ifelse(env_sc$depth == 'top', lst_palev$moisture[env_sc$moisture], 0))
+  
+  # # plot long layout ---
+  # for(j in 2:1){
+  #   plot.new()
+  #   text(0.5,0.5, labels=paste('PCA',j), srt=ifelse(j == 1, 0, 90))
+  # }
+  # 
+  # 
+  # for(j in seq_along(fact_3)){
+  #   
+  #   fact <- fact_3[j]
+  #   
+  #   pal <- lst_palev[[fact]][env_sc[[fact]]]
+  #   
+  #   #---
+  #   plot(smp, xlim=range(smp[,1]), ylim=range(smp[,2]), xaxt='n', yaxt='n',
+  #        col=pal, pch=NA)
+  #   
+  #   abline(v=0, h=0, lty=3)
+  # 
+  #   # variables
+  #   arrows(0,0,v2[,1],v2[,2], length=0, lty=2)
+  #   
+  #   if(j < 3){       
+  #     axis(3, at=seq(-max_smp1, max_smp1, length.out=9), labels=round(seq(-max_var1, max_var1, length.out=9), 2), col=2)
+  #   }
+  #   
+  #   if(j > 1){
+  #     axis(4, at=seq(-max_smp2, max_smp2, length.out=9), labels=round(seq(-max_var2, max_var2, length.out=9), 2), col=2)
+  #   }
+  #   
+  #   text(v2[,1:2], labels=paste(row.names(v2)))
+  #   
+  #   # samples
+  #   if(j > 1){
+  #     axis(1)
+  #   }
+  #   
+  #   if(j %% 2 == 1){
+  #     axis(2)
+  #   }
+  #   
+  #   ordispider(smp, env_sc$combi, col='grey80')
+  #   
+  #   points(smp[,1], smp[,2], pch=19, col=pal)
+  #   # text(site, labels=row.names(site), col=pal)
+  # }
 }
 
+# legend ---
+leg(lay='short')
+
+#---
+dev.off()
 
 # permu and primer names ----
 permu <- 10000
 
 #---
-prim_names <- c('01_16S_bact','02_18S_euk','03_pmoA_mb661','04_pmoA_A682','05_ITS_fun','06_phoD','07_nifH', '08_16S_cyano','09_nirS')
-ind_prim <- c(1,2,5,8)
-n_comm <- prim_names[ind_prim]
+n_comm <- c('01_16S_bact','02_18S_euk','05_ITS_fun','Embryophyceae','Metazoa')
+ind_prim <- 1:3
 
 # loop the primers ####
 lst_comm <- NULL
 for(i in ind_prim) {
   
   # initialize ----
-  print(prim_names[i])
+  print(n_comm[i])
   
-  id_plate <- as.character(i)
-  if(i < 10){
-    id_plate <- paste0('0', id_plate)
-  }
+  id_plate <- substr(n_comm[i], 1, 2)
   
   #---
   file <- paste0(dir_save, '00_ini_', id_plate, '.Rdata')
@@ -219,15 +282,6 @@ for(i in ind_prim) {
   # reorganize mr ----
   mr_tot <- mr_ini[grep('T|B', row.names(mr_ini)),]
   
-  # removal of faild cyaB sample
-  if(i == 8){
-    ech_scrap <- c('T019','T029','T031','T033','T097','T103','T105','T004','T006','T010','T012','T016','T018',
-                   'T020','T028','T022','T030','T034','T036','T040','T046','T042','T048','T056','T062','T068',
-                   'T086','T098','T005','T007','T011','T079','T023','T032','T078','T052','T072','T038','T045')
-    ind_scrap <- grepl(paste(ech_scrap, collapse='|'), row.names(mr_tot))
-    mr_tot <- mr_tot[ind_scrap,]
-  }
-  
   # remove the OTU found in the blanks
   ind_blk <- grepl('B', row.names(mr_tot))
 
@@ -236,7 +290,7 @@ for(i in ind_prim) {
   
   rs <- rowSums(mr_tot)
   ord <- order(rs)
-  plot(rs[ord], col=as.numeric(ind_blk[ord])+1, pch=19, main=prim_names[i])
+  plot(rs[ord], col=as.numeric(ind_blk[ord])+1, pch=19, main=n_comm[i])
   
   if(length(which(ind_blk))){
     mr_blk <- ifelse(mr_tot[grep('B', row.names(mr_tot)),] == 0, 0, 1)
@@ -367,11 +421,10 @@ for(i in ind_prim) {
   }
   
   # rename OTU according to dataset
-  id <- switch(prim_names[i],
+  id <- switch(n_comm[i],
                '01_16S_bact' = 'bac',
                '02_18S_euk' = 'euk',
-               '05_ITS_fun' = 'fun',
-               '08_16S_cyano' = 'cya')
+               '05_ITS_fun' = 'fun')
   
   names(mr_tot) <- sub('X_', paste0(id, '_'), names(mr_tot))
   
@@ -386,7 +439,7 @@ for(i in ind_prim) {
   taxo_tot <- lst_ass_tot[[1]]$taxo_tot
   
   # improve the taxo with blastn best match of the OTUs against Unite
-  if(i == 5){ 
+  if(i == 3){ 
     tt1 <- as.matrix(lst_ass_tot[[1]]$taxo_tot)
     tt2 <- as.matrix(lst_ass_tot[[2]]$taxo_tot)
     ass1 <- as.matrix(lst_ass_tot[[1]]$ass_tot)
@@ -414,110 +467,135 @@ for(i in ind_prim) {
   taxo_false <- switch(i,
                        '1' = c('Chloroplast','Mitochondria'),
                        '2' = c('Metazoa','Embryophyceae'),
-                       '3' = c('Life','TRUE_X'),
-                       '4' = c('Life','TRUE_X'),
-                       '5' = c('Life','Plantae','Chromista','Animalia','Protista'),
-                       '6' = c('Life','TRUE_X'),
-                       '7' = c('Life','TRUE_X'),
-                       '8' = c('Life','TRUE_X','Bacteria_X','Chloroplast','Acidobacteriota','Actinobacteria','Actinobacteriota',
-                               'Armatimonadetes','Chloroflexi','Firmicutes','GN02','Methylomirabilota','MVP-21','Nitrospinota',
-                               'OD1','OP11','OP3','OP8','Patescibacteria','Planctomycetota','Planctomycetes','Proteobacteria',
-                               'TM7','Verrucomicrobiota','WS4'),
-                       '9' = c('Life','TRUE_X'))
+                       '3' = c('Life','Plantae','Chromista','Animalia','Protista'))
   taxo_false <- paste0(taxo_false, collapse='|')
   ind_tf <- grepl(taxo_false, taxo_sort[,1]) | grepl(taxo_false, taxo_sort[,2]) | grepl(taxo_false, ass_sort$taxo)
   
-  if(length(which(ind_tf))){
-    ass_sort <- droplevels(ass_sort[ind_tf == F,])
-    mr_sort <- mr_sort[,ind_tf == F]
-    mr_sort <- mr_sort[rowSums(mr_sort) != 0,]
-    taxo_sort <- droplevels(as.data.frame(taxo_sort)[ind_tf == F,])
+  # prepare for multiple community within one dataset
+  lst2 <- list(list(mr=mr_sort, ass=ass_sort, taxo=taxo_sort))
+  
+  names(lst2) <- n_comm[i]
+  
+  if(i == 2){
+    for(j in c('Embryophyceae','Metazoa')){
+      ind_tax <- grep(j, lst2[[1]]$ass$taxo)
+      
+      mr <- lst2[[1]]$mr[,ind_tax]
+      mr <- mr[rowSums(mr) != 0]
+      ass <- droplevels(lst2[[1]]$ass[ind_tax,])
+      taxo <- droplevels(lst2[[1]]$taxo[ind_tax,])
+      env <- env_tot[row.names(mr),]
+      
+      names(mr) <- row.names(ass) <- row.names(taxo) <- sub('euk', ifelse(j == 'Embryophyceae', 'emb','met'), names(mr))
+      
+      lst2[[j]] <- list(mr=mr, ass=ass, taxo=taxo, env=env)
+    }
   }
   
-  env_sort <- env_tot[row.names(mr_sort),]
+  lst2[[1]]$mr <- lst2[[1]]$mr[,ind_tf == F]
+  lst2[[1]]$mr <- lst2[[1]]$mr[rowSums(lst2[[1]]$mr) != 0,]
+  lst2[[1]]$ass <- droplevels(lst2[[1]]$ass[ind_tf == F,])
+  lst2[[1]]$taxo <- droplevels(as.data.frame(lst2[[1]]$taxo)[ind_tf == F,])
+  lst2[[1]]$env <- env_tot[row.names(lst2[[1]]$mr),]
   
   # supress the last column of the taxo of bacteria (uninformative)
   if(i == 1){
-    taxo_sort <- taxo_sort[,-ncol(taxo_sort)]
-  }
-  if(i == 8){
-    taxo_sort <- taxo_sort[,-c(1,ncol(taxo_sort))]
+    lst2[[1]]$taxo <- lst2[[1]]$taxo[,-ncol(lst2[[1]]$taxo)]
   }
   
-  # name tax_level
-  names(taxo_sort) <- switch(as.character(i), 
-                             '1' = c('reign','phylum','class','order','family','genus','species'),
-                             '2' = c('reign','phylum','division','class','order','family','genus','species'),
-                             '5' = c('reign','division','class','order','family','genus','species'),
-                             '8' = c('phylum','class','order','family','genus'))
+  n_lst2 <- names(lst2)
   
-  # find low sequence samples (piecewise linear model) ----
-  lrs <- log(sort(rowSums(mr_sort)))
-  
-  x <- brks <- seq_along(lrs)
-  
-  mse <- lh_steep <- NULL
-  for(j in brks){
-    mod <- lm(lrs~x*(x <= brks[j]) + x*(x < brks[j]))
-    mse <- c(mse, summary(mod)$sigma)
+  # loop on all sub-communities
+  lst2 <- lapply(seq_along(lst2), function(ind) {
     
+    mr   <- lst2[[ind]]$mr
+    ass  <- lst2[[ind]]$ass
+    taxo <- lst2[[ind]]$taxo
+    env  <- lst2[[ind]]$env
+    
+    # name tax_level
+    names(taxo) <- switch(i, 
+                          '1' = c('reign','phylum','class','order','family','genus','species'),
+                          '2' = c('reign','phylum','division','class','order','family','genus','species'),
+                          '3' = c('reign','division','class','order','family','genus','species'))
+  
+    # find low sequence samples (piecewise linear model) ----
+    lrs <- log(sort(rowSums(mr)))
+    
+    x <- brks <- seq_along(lrs)
+    
+    mse <- lh_steep <- NULL
+    for(j in brks){
+      mod <- lm(lrs~x*(x <= brks[j]) + x*(x < brks[j]))
+      mse <- c(mse, summary(mod)$sigma)
+      
+      co <- coef(mod)
+      lh_steep <- c(lh_steep, co[2]+co[5] > co[2])
+    }
+    
+    min_mse <- which(mse == min(mse[lh_steep], na.rm=T))
+    
+    mod <- lm(lrs ~ x*(x < min_mse) + x*(x > min_mse))
     co <- coef(mod)
-    lh_steep <- c(lh_steep, co[2]+co[5] > co[2])
+    
+    low_seq <- names(lrs)[1:(min_mse-1)]
+    
+    env$low_seq <- row.names(env) %in% low_seq
+    
+    #---
+    # cairo_ps(paste0(dir_prep, 'piecewise_', n_comm[i], '_', ind, '.eps'))
+    svg(paste0(dir_prep, 'piecewise_', n_comm[i], '_', ind, '.svg'))
+    plot(lrs~x, xlab='', ylab='log of rowSums', main=paste(n_comm[i], names(lst2)[ind]))
+    
+    curve(co[1]+co[3] + (co[2]+co[5])*x, add=T, from=1, to=min_mse)
+    curve(co[1]+co[4] + (co[2])*x, add=T, from=min_mse, to=length(lrs))
+    abline(v=min_mse, lty=3)
+    
+    dev.off()
+    
+    # communities building ----
+    # without the low_sequences samples (piecewise regression)
+    mr_nls <- mr[env$low_seq == F,]
+    mr_nls <- mr_nls[,colSums(mr_nls) != 0]
+    
+    env_nls <- env[row.names(mr_nls),]
+    
+    ass_nls <- ass[names(mr_nls),]
+    taxo_nls <- taxo[names(mr_nls),]
+    
+    # centered log ratio on nls
+    mr_rcz <- mr_nls[,colSums(decostand(mr_nls, 'pa')) > 1] # take out the OTU found in only one sample otherwise, the replacment of 0 give negative values
+    system.time(mr_rcz <- cmultRepl(mr_rcz, method='CZM', output='p-counts')) #30 sec
+    mr_clr_nls <- as.data.frame(t(apply(mr_rcz, 1, function(x) log(x) - mean(log(x)) )))
+    
+    env_clr_nls <- env[row.names(mr_clr_nls),]
+    
+    ass_clr_nls <- ass[names(mr_clr_nls),]
+    taxo_clr_nls <- taxo[names(mr_clr_nls),]
+  
+    #---
+    lst <- list(raw = list(env=env, mr=mr, ass=ass, taxo=taxo, lst_ass_tot=lst_ass_tot, lst_ass_ini=lst_ass_ini),
+                nls = list(env=env_nls,  mr=mr_nls,  ass=ass_nls, taxo=taxo_nls),
+                clr_nls = list(env=env_clr_nls, mr=mr_clr_nls, ass=ass_clr_nls, taxo=taxo_clr_nls)
+                )
+    
+    return(lst)
+  })
+  
+  names(lst2) <- n_lst2
+  
+  for(j in names(lst2)){
+    
+    lst_comm[[j]] <- truc <- lst2[[j]]
+    
+    file <- paste0(dir_save, '00_lst_comm_', j, '.Rdata')
+    save(truc, file=file)
+    
   }
   
-  min_mse <- which(mse == min(mse[lh_steep], na.rm=T))
-  
-  mod <- lm(lrs ~ x*(x < min_mse) + x*(x > min_mse))
-  co <- coef(mod)
-  
-  low_seq <- names(lrs)[1:(min_mse-1)]
-  
-  env_sort$low_seq <- row.names(env_sort) %in% low_seq
-  
-  #---
-  cairo_ps(paste0(dir_prep, 'piecewise_', prim_names[i], '.eps'))
-  plot(lrs~x, xlab='', ylab='log of rowSums', main=prim_names[i])
-  
-  curve(co[1]+co[3] + (co[2]+co[5])*x, add=T, from=1, to=min_mse)
-  curve(co[1]+co[4] + (co[2])*x, add=T, from=min_mse, to=length(lrs))
-  abline(v=min_mse, lty=3)
-  
-  dev.off()
-  
-  # communities building ----
-  # without the low_sequences samples (piecewise regression)
-  mr_nls <- mr_sort[env_sort$low_seq == F,]
-  mr_nls <- mr_nls[,colSums(mr_nls) != 0]
-  
-  env_nls <- env_sort[row.names(mr_nls),]
-  
-  ass_nls <- ass_sort[names(mr_nls),]
-  taxo_nls <- taxo_sort[names(mr_nls),]
-  
-  # centered log ratio on nls
-  mr_rcz <- mr_nls[,colSums(decostand(mr_nls, 'pa')) > 1] # take out the OTU found in only one sample otherwise, the replacment of 0 give negative values
-  system.time(mr_rcz <- cmultRepl(mr_rcz, method='CZM', output='p-counts')) #30 sec
-  mr_clr_nls <- as.data.frame(t(apply(mr_rcz, 1, function(x) log(x) - mean(log(x)) )))
-  
-  env_clr_nls <- env_tot[row.names(mr_clr_nls),]
-  
-  ass_clr_nls <- ass_sort[names(mr_clr_nls),]
-  taxo_clr_nls <- taxo_sort[names(mr_clr_nls),]
-  
-  #---
-  lst <- list(raw = list(env=env_sort, mr=mr_sort, ass=ass_sort, taxo=taxo_sort, lst_ass_tot=lst_ass_tot, lst_ass_ini=lst_ass_ini),
-              nls = list(env=env_nls,  mr=mr_nls,  ass=ass_nls,  taxo=taxo_nls),
-              clr_nls = list(env=env_clr_nls, mr=mr_clr_nls, ass=ass_clr_nls, taxo=taxo_clr_nls)
-              )
-
-  # return(lst)
-  lst_comm[[prim_names[i]]] <- lst
-  
-  file <- paste0(dir_save, '00_lst_comm_', prim_names[i], '.Rdata')
-  save(lst, file=file)
 }
 
-names(lst_comm) <- n_comm
+n_comm <- names(lst_comm)
 
 #---
 file <- paste0(dir_save, '00_lst_comm.Rdata')
@@ -586,7 +664,7 @@ for(i in c(1,2,5,8)){
 
     plot(NA, xlim=c(1,ncol(j)), xaxt='n', xlab='',
          ylim=range(j, na.rm=T), ylab=ifelse(jn == 'raw', 'nb seq', '% nb_seq'),
-         log=ifelse(jn == 'raw', 'y', ''), main=paste(jn, prim_names[i]))
+         log=ifelse(jn == 'raw', 'y', ''), main=paste(jn, n_comm[i]))
     axis(1, at=1:ncol(j), labels=names(j), las=2)
 
     for(k in 1:nrow(j)){
@@ -621,7 +699,7 @@ for(i in 1:2){
     lines(1:5, df[j,], col=pal_prim[j])
   }
 
-  if(i == 2)legend('bottomleft', legend=prim_names[c(1,2,5,8)], pch=19, col=pal_prim, bty='n', cex=0.5)
+  if(i == 2)legend('bottomleft', legend=n_comm[c(1,2,5,8)], pch=19, col=pal_prim, bty='n', cex=0.5)
 }
 
 dev.off()

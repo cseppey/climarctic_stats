@@ -31,14 +31,16 @@ for(i in n_comm){
   tax_lev <- switch(i,
                     "01_16S_bact"   = 1:5,
                     "02_18S_euk"    = 1:5,
-                    "05_ITS_fun"    = 1:5,
-                    "08_16S_cyano"  = 2:4)
+                    "Embryophyceae" = 4:8,
+                    "Metazoa"       = 3:6,
+                    "05_ITS_fun"    = 1:5)
   
   root <- switch(i,
                  "01_16S_bact"   = 'Bacteria',
                  "02_18S_euk"    = 'Eukaryota',
-                 "05_ITS_fun"    = 'Fungi',
-                 "08_16S_cyano"  = 'Cyanobacteria')
+                 "Embryophyceae" = 'Embryophyceae',
+                 "Metazoa"       = 'Metazoa',
+                 "05_ITS_fun"    = 'Fungi')
   
   #---
   mr <- as.matrix(lst_comm[[i]]$nls$mr)
@@ -201,8 +203,8 @@ for(i in n_comm){
 
       source('bin/src/my_prog/R/pie_taxo.r')
       
-      # pdf(paste0(dir_pie, 'pie_', kn, '_', i, '_', j, '.pdf'), width=kl$wdt, height=kl$hei)
-      cairo_ps(paste0(dir_pie, 'pie_', kn, '_', i, '_', j, '.eps'), width=kl$wdt, height=kl$hei)
+      # cairo_ps(paste0(dir_pie, 'pie_', kn, '_', i, '_', j, '.eps'), width=kl$wdt, height=kl$hei)
+      svg(paste0(dir_pie, 'pie_', kn, '_', i, '_', j, '.svg'), width=kl$wdt, height=kl$hei)
       
       m <- mr
       m <- decostand(m, 'total')
